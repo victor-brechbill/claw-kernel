@@ -7,14 +7,17 @@ import type { WizardPrompter } from "./prompts.js";
 import { DEFAULT_BOOTSTRAP_FILENAME } from "../agents/workspace.js";
 import { runOnboardingWizard } from "./onboarding.js";
 
-const ensureAuthProfileStore = vi.hoisted(() => vi.fn(() => ({ profiles: {} })));
-const promptAuthChoiceGrouped = vi.hoisted(() => vi.fn(async () => "skip"));
 const applyAuthChoice = vi.hoisted(() => vi.fn(async (args) => ({ config: args.config })));
-const resolvePreferredProviderForAuthChoice = vi.hoisted(() => vi.fn(() => "openai"));
 const warnIfModelConfigLooksOff = vi.hoisted(() => vi.fn(async () => {}));
-const applyPrimaryModel = vi.hoisted(() => vi.fn((cfg) => cfg));
-const promptDefaultModel = vi.hoisted(() => vi.fn(async () => ({ config: null, model: null })));
 const promptCustomApiConfig = vi.hoisted(() => vi.fn(async (args) => ({ config: args.config })));
+const mockTelegramConfigure = vi.hoisted(() => vi.fn(async (ctx) => ({ cfg: ctx.cfg })));
+const getChannelOnboardingAdapter = vi.hoisted(() =>
+  vi.fn(() => ({
+    channel: "telegram",
+    configure: mockTelegramConfigure,
+  })),
+);
+const enablePluginInConfig = vi.hoisted(() => vi.fn((cfg) => ({ config: cfg, enabled: true })));
 const configureGatewayForOnboarding = vi.hoisted(() =>
   vi.fn(async (args) => ({
     nextConfig: args.nextConfig,
@@ -84,27 +87,21 @@ vi.mock("../commands/onboard-skills.js", () => ({
   setupSkills,
 }));
 
-vi.mock("../agents/auth-profiles.js", () => ({
-  ensureAuthProfileStore,
-}));
-
-vi.mock("../commands/auth-choice-prompt.js", () => ({
-  promptAuthChoiceGrouped,
-}));
-
 vi.mock("../commands/auth-choice.js", () => ({
   applyAuthChoice,
-  resolvePreferredProviderForAuthChoice,
   warnIfModelConfigLooksOff,
-}));
-
-vi.mock("../commands/model-picker.js", () => ({
-  applyPrimaryModel,
-  promptDefaultModel,
 }));
 
 vi.mock("../commands/onboard-custom.js", () => ({
   promptCustomApiConfig,
+}));
+
+vi.mock("../commands/onboarding/registry.js", () => ({
+  getChannelOnboardingAdapter,
+}));
+
+vi.mock("../plugins/enable.js", () => ({
+  enablePluginInConfig,
 }));
 
 vi.mock("../commands/health.js", () => ({
@@ -294,7 +291,7 @@ describe("runOnboardingWizard", () => {
     );
 
     expect(select).not.toHaveBeenCalled();
-    expect(setupChannels).not.toHaveBeenCalled();
+    expect(mockTelegramConfigure).not.toHaveBeenCalled();
     expect(setupSkills).not.toHaveBeenCalled();
     expect(healthCommand).not.toHaveBeenCalled();
     expect(runTui).not.toHaveBeenCalled();

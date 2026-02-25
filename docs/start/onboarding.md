@@ -79,3 +79,14 @@ Onboarding requests TCC permissions needed for:
   what happens on the gateway host during the first agent run.
 </Step>
 </Steps>
+
+## Simplified CLI Onboarding
+
+The CLI onboarding wizard (`openclaw onboard`) uses a streamlined flow:
+
+- **Auth:** Defaults to Anthropic setup‑token. No provider picker is shown.
+- **Channel:** Defaults to Telegram. No channel picker is shown.
+- Other auth providers and channels can be added after initial setup via
+  `openclaw configure`.
+- All CLI override flags (e.g., `--auth-choice`, `--skip-channels`) continue to
+  work as before.
