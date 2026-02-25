@@ -1,3 +1,4 @@
+import type { AuthChoice } from "../commands/onboard-types.js";
 import type {
   GatewayAuthChoice,
   OnboardMode,
@@ -336,26 +337,12 @@ export async function runOnboardingWizard(
   const { applyOnboardingLocalWorkspaceConfig } = await import("../commands/onboard-config.js");
   let nextConfig: OpenClawConfig = applyOnboardingLocalWorkspaceConfig(baseConfig, workspaceDir);
 
-  const { ensureAuthProfileStore } = await import("../agents/auth-profiles.js");
-  const { promptAuthChoiceGrouped } = await import("../commands/auth-choice-prompt.js");
-  const { promptCustomApiConfig } = await import("../commands/onboard-custom.js");
-  const { applyAuthChoice, resolvePreferredProviderForAuthChoice, warnIfModelConfigLooksOff } =
-    await import("../commands/auth-choice.js");
-  const { applyPrimaryModel, promptDefaultModel } = await import("../commands/model-picker.js");
+  const { applyAuthChoice, warnIfModelConfigLooksOff } = await import("../commands/auth-choice.js");
 
-  const authStore = ensureAuthProfileStore(undefined, {
-    allowKeychainPrompt: false,
-  });
-  const authChoiceFromPrompt = opts.authChoice === undefined;
-  const authChoice =
-    opts.authChoice ??
-    (await promptAuthChoiceGrouped({
-      prompter,
-      store: authStore,
-      includeSkip: true,
-    }));
+  const authChoice: AuthChoice = opts.authChoice ?? "token";
 
   if (authChoice === "custom-api-key") {
+    const { promptCustomApiConfig } = await import("../commands/onboard-custom.js");
     const customResult = await promptCustomApiConfig({
       prompter,
       runtime,
@@ -377,23 +364,6 @@ export async function runOnboardingWizard(
     nextConfig = authResult.config;
   }
 
-  if (authChoiceFromPrompt && authChoice !== "custom-api-key") {
-    const modelSelection = await promptDefaultModel({
-      config: nextConfig,
-      prompter,
-      allowKeep: true,
-      ignoreAllowlist: true,
-      includeVllm: true,
-      preferredProvider: resolvePreferredProviderForAuthChoice(authChoice),
-    });
-    if (modelSelection.config) {
-      nextConfig = modelSelection.config;
-    }
-    if (modelSelection.model) {
-      nextConfig = applyPrimaryModel(nextConfig, modelSelection.model);
-    }
-  }
-
   await warnIfModelConfigLooksOff(nextConfig, prompter);
 
   const { configureGatewayForOnboarding } = await import("./onboarding.gateway-config.js");
@@ -412,21 +382,40 @@ export async function runOnboardingWizard(
   if (opts.skipChannels ?? opts.skipProviders) {
     await prompter.note("Skipping channel setup.", "Channels");
   } else {
-    const { listChannelPlugins } = await import("../channels/plugins/index.js");
-    const { setupChannels } = await import("../commands/onboard-channels.js");
-    const quickstartAllowFromChannels =
-      flow === "quickstart"
-        ? listChannelPlugins()
-            .filter((plugin) => plugin.meta.quickstartAllowFrom)
-            .map((plugin) => plugin.id)
-        : [];
-    nextConfig = await setupChannels(nextConfig, runtime, prompter, {
-      allowSignalInstall: true,
-      forceAllowFromChannels: quickstartAllowFromChannels,
-      skipDmPolicyPrompt: flow === "quickstart",
-      skipConfirm: flow === "quickstart",
-      quickstartDefaults: flow === "quickstart",
-    });
+    const { getChannelOnboardingAdapter } = await import("../commands/onboarding/registry.js");
+    const { enablePluginInConfig } = await import("../plugins/enable.js");
+
+    const telegramAdapter = getChannelOnboardingAdapter("telegram");
+    if (telegramAdapter) {
+      await prompter.note(
+        [
+          "OpenClaw uses Telegram as its default messaging channel.",
+          `Other channels can be added later via ${formatCliCommand("openclaw configure")}.`,
+        ].join("\n"),
+        "Telegram",
+      );
+
+      const pluginResult = enablePluginInConfig(nextConfig, "telegram");
+      nextConfig = pluginResult.config;
+
+      const result = await telegramAdapter.configure({
+        cfg: nextConfig,
+        runtime,
+        prompter,
+        accountOverrides: {},
+        shouldPromptAccountIds: false,
+        forceAllowFrom: flow === "quickstart",
+      });
+      nextConfig = result.cfg;
+    } else {
+      await prompter.note(
+        [
+          "Telegram channel plugin not available.",
+          `Add channels later via ${formatCliCommand("openclaw configure")}.`,
+        ].join("\n"),
+        "Channels",
+      );
+    }
   }
 
   await writeConfigFile(nextConfig);

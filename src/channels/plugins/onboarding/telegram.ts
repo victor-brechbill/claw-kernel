@@ -33,12 +33,17 @@ function setTelegramDmPolicy(cfg: OpenClawConfig, dmPolicy: DmPolicy) {
 async function noteTelegramTokenHelp(prompter: WizardPrompter): Promise<void> {
   await prompter.note(
     [
-      "1) Open Telegram and chat with @BotFather",
-      "2) Run /newbot (or /mybots)",
-      "3) Copy the token (looks like 123456:ABC...)",
+      "1) Open Telegram and search for @BotFather — start a chat with it.",
+      "",
+      "2) Send /newbot and follow the prompts to pick a name and username.",
+      "",
+      "3) BotFather will reply with a token (looks like 123456:ABC-DEF...).",
+      "   Copy the full token.",
+      "",
+      "Already have a bot? Send /mybots to BotFather to manage existing bots.",
+      "",
       "Tip: you can also set TELEGRAM_BOT_TOKEN in your env.",
       `Docs: ${formatDocsLink("/telegram")}`,
-      "Website: https://openclaw.ai",
     ].join("\n"),
     "Telegram bot token",
   );
