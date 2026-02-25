@@ -1,10 +1,16 @@
 #!/bin/bash
-# patch-1m-context.sh — Apply 1M context window patch to pi-ai dependency
+# patch-1m-context.sh — Safety patch for pi-ai dependency
 # This runs automatically via npm postinstall. Also used by rebuild-kernel.sh.
 #
-# What it does:
-# 1. Adds context-1m-2025-08-07 beta header to Anthropic API calls
-# 2. Updates contextWindow from 200K to 1M for opus-4-6 models
+# ⚠️  CRITICAL: DO NOT re-add the "context-1m-2025-08-07" beta header!
+#
+# History:
+#   - Originally patched anthropic.js to add "context-1m-2025-08-07" beta header
+#   - This caused "LLM request rejected: The long context beta is not
+#     yet available for this subscription" when using OAuth (Pro Max subscription)
+#   - The 1M context beta feature REQUIRES an Anthropic API key — NOT OAuth
+#   - We use OAuth exclusively (API is ~$100/day, never again)
+#   - FIX: Removed the beta header. Script now only STRIPS it if present.
 #
 # Upstream issue: https://github.com/openclaw/openclaw/issues/11057
 
@@ -13,36 +19,32 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 ANTHRO="$ROOT_DIR/node_modules/@mariozechner/pi-ai/dist/providers/anthropic.js"
-MODELS="$ROOT_DIR/node_modules/@mariozechner/pi-ai/dist/models.generated.js"
 
-echo "Patching for 1M context window (Opus 4.6)..."
+echo "Applying OpenClaw safety patches..."
 
-# Patch 1: Add context-1m beta header
-if [ -f "$ANTHRO" ]; then
-  if ! grep -q "context-1m" "$ANTHRO"; then
-    # Add to the betaFeatures array (non-copilot path)
-    sed -i 's/const betaFeatures = \["fine-grained-tool-streaming-2025-05-14"\];/const betaFeatures = ["fine-grained-tool-streaming-2025-05-14", "context-1m-2025-08-07"];/' "$ANTHRO"
-    echo "  ✅ anthropic.js patched (added context-1m beta header)"
-  else
-    echo "  ℹ️  anthropic.js already patched"
-  fi
-else
-  echo "  ⚠️  anthropic.js not found — skipping"
+# ── Safety check: strip context-1m beta header from ALL anthropic.js copies ─
+# This header BREAKS OAuth/subscription auth. Must never be present.
+CLEAN=true
+for JS_FILE in \
+    "$ANTHRO" \
+    $(find "$ROOT_DIR/node_modules/.pnpm" -name "anthropic.js" -path "*/providers/anthropic.js" 2>/dev/null); do
+    if grep -q "context-1m-2025-08-07" "$JS_FILE" 2>/dev/null; then
+        echo "  ⚠️  DANGER: context-1m-2025-08-07 found in: $JS_FILE"
+        echo "      This BREAKS OAuth/subscription auth. Removing it now..."
+        sed -i 's/, "context-1m-2025-08-07"//' "$JS_FILE"
+        sed -i 's/"context-1m-2025-08-07", //' "$JS_FILE"
+        echo "  ✅  Removed from: $JS_FILE"
+        CLEAN=false
+    fi
+done
+if [ "$CLEAN" = true ]; then
+    echo "  ✅  All anthropic.js files clean (no context-1m header)"
 fi
 
-# Patch 2: Update contextWindow 200K → 1M for opus-4-6
-if [ -f "$MODELS" ]; then
-  COUNT=$(grep -c 'contextWindow: 200000' "$MODELS" 2>/dev/null || echo "0")
-  if [ "$COUNT" -gt "0" ]; then
-    # Only patch opus-4-6 entries
-    sed -i '/opus-4-6/,/contextWindow/ s/contextWindow: 200000/contextWindow: 1000000/' "$MODELS"
-    NEW_COUNT=$(grep -c 'contextWindow: 1000000' "$MODELS" 2>/dev/null || echo "0")
-    echo "  ✅ models.generated.js patched ($NEW_COUNT entries → 1M)"
-  else
-    echo "  ℹ️  models.generated.js already patched"
-  fi
-else
-  echo "  ⚠️  models.generated.js not found — skipping"
-fi
+echo "  ✅ models.generated.js: no contextWindow changes needed (200K is accurate for OAuth/subscription)"
 
-echo "Done!"
+echo ""
+echo "Done."
+echo ""
+echo "⚠️  REMINDER: We run OAuth (Pro Max subscription), NOT the Anthropic API."
+echo "    Never add API-only beta headers (like context-1m-2025-08-07) to anthropic.js."

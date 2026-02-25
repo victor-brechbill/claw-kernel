@@ -75,6 +75,12 @@ export function createServerToolsStreamFnWrapper(
           if (!Array.isArray(p.tools)) {
             p.tools = [];
           }
+          // Remove existing client-side tools whose names conflict with server tools
+          const serverToolNames = new Set(defs.map((d) => d.name));
+          p.tools = p.tools.filter((t) => {
+            const name = (t as { name?: string })?.name;
+            return !name || !serverToolNames.has(name);
+          });
           p.tools.push(...defs);
           log.debug(`server tools: injected ${defs.length} definition(s) into payload`);
         }
