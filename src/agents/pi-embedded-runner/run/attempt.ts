@@ -88,7 +88,6 @@ import {
   setActiveEmbeddedRun,
 } from "../runs.js";
 import { buildEmbeddedSandboxInfo } from "../sandbox-info.js";
-import { createServerToolsStreamFnWrapper, resolveServerTools } from "../server-tools.js";
 import { prewarmSessionFile, trackSessionManagerAccess } from "../session-manager-cache.js";
 import { prepareSessionManagerForRun } from "../session-manager-init.js";
 import {
@@ -617,13 +616,6 @@ export async function runEmbeddedAttempt(
         params.streamParams,
       );
 
-      const serverToolTypes = resolveServerTools(params.config);
-      if (serverToolTypes) {
-        activeSession.agent.streamFn = createServerToolsStreamFnWrapper(
-          activeSession.agent.streamFn ?? streamSimple,
-          serverToolTypes,
-        );
-      }
 
       if (cacheTrace) {
         cacheTrace.recordStage("session:loaded", {

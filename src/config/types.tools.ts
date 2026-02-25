@@ -497,7 +497,4 @@ export type ToolsConfig = {
       deny?: string[];
     };
   };
-  /** Anthropic server-side tool type strings (e.g. ["web_search_20260209"]).
-   * Only applied when using Anthropic models. */
-  serverTools?: string[];
 };

@@ -3,7 +3,7 @@ type ToolResultCounts = {
   errors: number;
 };
 
-const TOOL_CALL_TYPES = new Set(["tool_use", "toolcall", "tool_call", "server_tool_use"]);
+const TOOL_CALL_TYPES = new Set(["tool_use", "toolcall", "tool_call"]);
 const TOOL_RESULT_TYPES = new Set(["tool_result", "tool_result_error"]);
 
 const normalizeType = (value: unknown): string => {

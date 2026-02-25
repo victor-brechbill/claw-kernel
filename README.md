@@ -100,17 +100,6 @@ Located at: `~/.clawdbot/clawdbot.json`
 
 ### Server-side tools
 
-Anthropic server-side tools (web search, web fetch) run on Anthropic's servers — no API keys needed:
-
-```json5
-{
-  tools: {
-    serverTools: ["web_search_20260209", "web_fetch_20260209"],
-  },
-}
-```
-
-Only active with Anthropic models. Client-side tools (`web.search`, etc.) continue to work alongside.
 
 **⚠️ Config changes are dangerous!** Always backup before editing:
 
