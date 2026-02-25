@@ -307,3 +307,138 @@ export function repairToolUseResultPairing(messages: AgentMessage[]): ToolUseRep
     moved: changedOrMoved,
   };
 }
+
+export type AbortedToolCleanupReport = {
+  messages: AgentMessage[];
+  strippedToolCalls: number;
+  strippedToolResults: number;
+};
+
+/**
+ * Strip incomplete tool_use blocks and their corresponding tool_result blocks
+ * when the assistant message has stopReason "error" or "aborted".
+ *
+ * Context: When a request is aborted mid-tool-call, the assistant message may contain
+ * incomplete tool_use blocks (missing closing tags, partial JSON, etc.). If synthetic
+ * tool_result blocks were added for these incomplete tool calls (either in this run
+ * or a previous run), the Anthropic API rejects the request with:
+ * "tool_use with id X was found without a corresponding tool_result block"
+ *
+ * This function prevents that error by:
+ * 1. Identifying assistant messages with stopReason === "error" || "aborted"
+ * 2. Extracting tool call IDs from those messages
+ * 3. Removing those tool_use blocks from the assistant message content
+ * 4. Removing any corresponding tool_result messages
+ *
+ * Related issues:
+ * - https://github.com/openclaw/openclaw/issues/12112
+ * - https://github.com/openclaw/openclaw/issues/4597
+ */
+export function stripAbortedToolCalls(messages: AgentMessage[]): AbortedToolCleanupReport {
+  const abortedToolCallIds = new Set<string>();
+  let strippedToolCalls = 0;
+  let strippedToolResults = 0;
+  let changed = false;
+  const out: AgentMessage[] = [];
+
+  // First pass: identify and strip incomplete tool calls from aborted/errored assistant messages
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") {
+      out.push(msg);
+      continue;
+    }
+
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
+      out.push(msg);
+      continue;
+    }
+
+    const stopReason = (msg as { stopReason?: string }).stopReason;
+
+    // Only process messages that were aborted or errored
+    if (stopReason !== "error" && stopReason !== "aborted") {
+      out.push(msg);
+      continue;
+    }
+
+    // Extract tool calls from this aborted message
+    const toolCalls = extractToolCallsFromAssistant(msg);
+
+    if (toolCalls.length === 0) {
+      // No tool calls to strip
+      out.push(msg);
+      continue;
+    }
+
+    // Track these tool call IDs for later removal of their results
+    for (const call of toolCalls) {
+      if (call.id) {
+        abortedToolCallIds.add(call.id);
+      }
+    }
+
+    // Strip all tool_use blocks from this aborted message
+    const filteredContent = msg.content.filter((block) => {
+      if (isToolCallBlock(block)) {
+        strippedToolCalls += 1;
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+
+    // If all content was tool calls, drop the entire message
+    if (filteredContent.length === 0) {
+      changed = true;
+      continue;
+    }
+
+    // Otherwise, keep the message with filtered content
+    out.push({ ...msg, content: filteredContent });
+  }
+
+  // Second pass: strip any tool_result blocks that reference aborted tool calls
+  if (abortedToolCallIds.size > 0) {
+    const finalOut: AgentMessage[] = [];
+
+    for (const msg of out) {
+      if (!msg || typeof msg !== "object") {
+        finalOut.push(msg);
+        continue;
+      }
+
+      if (msg.role !== "toolResult") {
+        finalOut.push(msg);
+        continue;
+      }
+
+      const toolResult = msg;
+      const resultId = extractToolResultId(toolResult);
+
+      if (resultId && abortedToolCallIds.has(resultId)) {
+        // This tool_result corresponds to an aborted tool_use - strip it
+        strippedToolResults += 1;
+        changed = true;
+        continue;
+      }
+
+      finalOut.push(msg);
+    }
+
+    return {
+      messages: changed ? finalOut : messages,
+      strippedToolCalls,
+      strippedToolResults,
+    };
+  }
+
+  return {
+    messages: changed ? out : messages,
+    strippedToolCalls,
+    strippedToolResults,
+  };
+}
+
+export function sanitizeAbortedToolCalls(messages: AgentMessage[]): AgentMessage[] {
+  return stripAbortedToolCalls(messages).messages;
+}
