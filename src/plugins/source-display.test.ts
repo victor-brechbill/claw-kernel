@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import { formatPluginSourceForTable } from "./source-display.js";
+
+describe("formatPluginSourceForTable", () => {
+  it("shortens bundled plugin sources under the stock root", () => {
+    const out = formatPluginSourceForTable(
+      {
+        origin: "bundled",
+        source: "/opt/homebrew/lib/node_modules/openclaw/extensions/telegram/index.ts",
+      },
+      {
+        stock: "/opt/homebrew/lib/node_modules/openclaw/extensions",
+        global: "/Users/x/.openclaw/extensions",
+        workspace: "/Users/x/ws/.openclaw/extensions",
+      },
+    );
+    expect(out.value).toBe("stock:telegram/index.ts");
+    expect(out.rootKey).toBe("stock");
+  });
+
+  it("shortens workspace plugin sources under the workspace root", () => {
+    const out = formatPluginSourceForTable(
+      {
+        origin: "workspace",
+        source: "/Users/x/ws/.openclaw/extensions/my-plugin/index.ts",
+      },
+      {
+        stock: "/opt/homebrew/lib/node_modules/openclaw/extensions",
+        global: "/Users/x/.openclaw/extensions",
+        workspace: "/Users/x/ws/.openclaw/extensions",
+      },
+    );
+    expect(out.value).toBe("workspace:my-plugin/index.ts");
+    expect(out.rootKey).toBe("workspace");
+  });
+
+  it("shortens global plugin sources under the global root", () => {
+    const out = formatPluginSourceForTable(
+      {
+        origin: "global",
+        source: "/Users/x/.openclaw/extensions/signal/index.js",
+      },
+      {
+        stock: "/opt/homebrew/lib/node_modules/openclaw/extensions",
+        global: "/Users/x/.openclaw/extensions",
+        workspace: "/Users/x/ws/.openclaw/extensions",
+      },
+    );
+    expect(out.value).toBe("global:signal/index.js");
+    expect(out.rootKey).toBe("global");
+  });
+});
