@@ -2,10 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { resolveRequiredHomeDir } from "../infra/home-dir.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
 import { resolveWorkspaceTemplateDir } from "./workspace-templates.js";
+
+const log = createSubsystemLogger("agent/workspace");
 
 export function resolveDefaultAgentWorkspaceDir(
   env: NodeJS.ProcessEnv = process.env,
@@ -27,6 +30,7 @@ export const DEFAULT_IDENTITY_FILENAME = "IDENTITY.md";
 export const DEFAULT_USER_FILENAME = "USER.md";
 export const DEFAULT_HEARTBEAT_FILENAME = "HEARTBEAT.md";
 export const DEFAULT_BOOTSTRAP_FILENAME = "BOOTSTRAP.md";
+export const DEFAULT_SETUP_FILENAME = "SETUP.md";
 export const DEFAULT_MEMORY_FILENAME = "MEMORY.md";
 export const DEFAULT_MEMORY_ALT_FILENAME = "memory.md";
 const WORKSPACE_STATE_DIRNAME = ".openclaw";
@@ -86,6 +90,7 @@ export type WorkspaceBootstrapFileName =
   | typeof DEFAULT_USER_FILENAME
   | typeof DEFAULT_HEARTBEAT_FILENAME
   | typeof DEFAULT_BOOTSTRAP_FILENAME
+  | typeof DEFAULT_SETUP_FILENAME
   | typeof DEFAULT_MEMORY_FILENAME
   | typeof DEFAULT_MEMORY_ALT_FILENAME;
 
@@ -100,6 +105,8 @@ type WorkspaceOnboardingState = {
   version: typeof WORKSPACE_STATE_VERSION;
   bootstrapSeededAt?: string;
   onboardingCompletedAt?: string;
+  setupSeededAt?: string;
+  setupCompletedAt?: string;
 };
 
 /** Set of recognized bootstrap filenames for runtime validation */
@@ -111,6 +118,7 @@ const VALID_BOOTSTRAP_NAMES: ReadonlySet<string> = new Set([
   DEFAULT_USER_FILENAME,
   DEFAULT_HEARTBEAT_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
+  DEFAULT_SETUP_FILENAME,
   DEFAULT_MEMORY_FILENAME,
   DEFAULT_MEMORY_ALT_FILENAME,
 ]);
@@ -149,6 +157,8 @@ function parseWorkspaceOnboardingState(raw: string): WorkspaceOnboardingState | 
     const parsed = JSON.parse(raw) as {
       bootstrapSeededAt?: unknown;
       onboardingCompletedAt?: unknown;
+      setupSeededAt?: unknown;
+      setupCompletedAt?: unknown;
     };
     if (!parsed || typeof parsed !== "object") {
       return null;
@@ -159,6 +169,9 @@ function parseWorkspaceOnboardingState(raw: string): WorkspaceOnboardingState | 
         typeof parsed.bootstrapSeededAt === "string" ? parsed.bootstrapSeededAt : undefined,
       onboardingCompletedAt:
         typeof parsed.onboardingCompletedAt === "string" ? parsed.onboardingCompletedAt : undefined,
+      setupSeededAt: typeof parsed.setupSeededAt === "string" ? parsed.setupSeededAt : undefined,
+      setupCompletedAt:
+        typeof parsed.setupCompletedAt === "string" ? parsed.setupCompletedAt : undefined,
     };
   } catch {
     return null;
@@ -194,6 +207,20 @@ export async function isWorkspaceOnboardingCompleted(dir: string): Promise<boole
   return (
     typeof state.onboardingCompletedAt === "string" && state.onboardingCompletedAt.trim().length > 0
   );
+}
+
+export function isSetupChecklistComplete(content: string): boolean {
+  const checkboxes = content.match(/^-\s*\[[ xX]\]/gm);
+  if (!checkboxes || checkboxes.length === 0) {
+    return false;
+  }
+  const unchecked = content.match(/^-\s*\[ \]/gm);
+  return !unchecked || unchecked.length === 0;
+}
+
+export async function isWorkspaceSetupCompleted(dir: string): Promise<boolean> {
+  const state = await readWorkspaceOnboardingStateForDir(dir);
+  return typeof state.setupCompletedAt === "string" && state.setupCompletedAt.trim().length > 0;
 }
 
 async function writeWorkspaceOnboardingState(
@@ -267,6 +294,7 @@ export async function ensureAgentWorkspace(params?: {
   userPath?: string;
   heartbeatPath?: string;
   bootstrapPath?: string;
+  setupPath?: string;
 }> {
   const rawDir = params?.dir?.trim() ? params.dir.trim() : DEFAULT_AGENT_WORKSPACE_DIR;
   const dir = resolveUserPath(rawDir);
@@ -355,6 +383,41 @@ export async function ensureAgentWorkspace(params?: {
     }
   }
 
+  // --- SETUP.md lifecycle ---
+  const setupPath = path.join(dir, DEFAULT_SETUP_FILENAME);
+  let setupExists = await fileExists(setupPath);
+
+  if (state.onboardingCompletedAt && !state.setupSeededAt && !state.setupCompletedAt) {
+    // Onboarding done, setup not yet seeded — seed SETUP.md
+    const setupTemplate = await loadTemplate(DEFAULT_SETUP_FILENAME);
+    await writeFileIfMissing(setupPath, setupTemplate);
+    setupExists = await fileExists(setupPath);
+    if (setupExists) {
+      markState({ setupSeededAt: nowIso() });
+      log.info("SETUP.md seeded into workspace");
+    }
+  }
+
+  if (setupExists && !state.setupSeededAt) {
+    // File exists but state doesn't track it yet (e.g. manually placed)
+    markState({ setupSeededAt: nowIso() });
+  }
+
+  if (state.setupSeededAt && !state.setupCompletedAt) {
+    if (setupExists) {
+      const setupContent = await fs.readFile(setupPath, "utf-8");
+      if (isSetupChecklistComplete(setupContent)) {
+        await fs.unlink(setupPath);
+        markState({ setupCompletedAt: nowIso() });
+        log.info("SETUP.md completed — all checkboxes checked, file removed");
+      }
+    } else {
+      // Manual deletion — mark as completed
+      markState({ setupCompletedAt: nowIso() });
+      log.info("SETUP.md manually removed — marking setup complete");
+    }
+  }
+
   if (stateDirty) {
     await writeWorkspaceOnboardingState(statePath, state);
   }
@@ -369,6 +432,7 @@ export async function ensureAgentWorkspace(params?: {
     userPath,
     heartbeatPath,
     bootstrapPath,
+    setupPath,
   };
 }
 
@@ -443,6 +507,10 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
     {
       name: DEFAULT_BOOTSTRAP_FILENAME,
       filePath: path.join(resolvedDir, DEFAULT_BOOTSTRAP_FILENAME),
+    },
+    {
+      name: DEFAULT_SETUP_FILENAME,
+      filePath: path.join(resolvedDir, DEFAULT_SETUP_FILENAME),
     },
   ];
 
