@@ -626,7 +626,6 @@ export const ToolsSchema = z
       })
       .strict()
       .optional(),
-    serverTools: z.array(z.string()).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
