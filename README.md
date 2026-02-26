@@ -1,272 +1,166 @@
-# ✨ Nova Kernel
+# Claw Kernel
 
-**Nova's personal AI assistant runtime** — a private fork of [OpenClaw](https://github.com/openclaw/openclaw) customized for Nova's specific needs.
+A streamlined, production-focused fork of [OpenClaw](https://github.com/openclaw/openclaw) — the multi-channel AI gateway runtime.
 
----
+Claw Kernel removes 27 unused extensions from upstream OpenClaw and keeps a focused set of channels (Telegram, Discord, WhatsApp) for a leaner, easier-to-maintain deployment.
 
-## What is this?
+## Why Claw Kernel?
 
-This is Nova's kernel — the core runtime that powers Nova, Victor's personal AI assistant. It's a fork of OpenClaw that has been streamlined and customized for a single-user, production-focused deployment.
+|                | OpenClaw                                                                  | Claw Kernel                         |
+| -------------- | ------------------------------------------------------------------------- | ----------------------------------- |
+| **Channels**   | 20+ (Telegram, Discord, WhatsApp, Signal, Slack, IRC, Matrix, Teams, ...) | 3 (Telegram, Discord, WhatsApp)     |
+| **Extensions** | Full set (~40)                                                            | Streamlined (13 removed categories) |
+| **Focus**      | Broad platform support                                                    | Single-user production deployment   |
+| **Updates**    | Rolling releases                                                          | Selective merges from upstream      |
+
+**What's included:**
+
+- Core runtime, tool system, and session management
+- Telegram (primary), Discord, and WhatsApp channels
+- Multi-agent orchestration (main agent + developer/reviewer/tester sub-agents)
+- Browser automation, cron/scheduling, memory system
+- Pre-loaded agent configs for developer and code-reviewer workflows
+- Generic workspace templates for quick bootstrapping
 
 **Forked from:** [OpenClaw v2026.2.17](https://github.com/openclaw/openclaw/tree/v2026.2.17)
 
-## Key Differences from Upstream
+## Quick Start
 
-**Removed 27 extensions** we don't use:
-
-- Channels: BlueBubbles, Feishu, Google Chat, iMessage (macOS), IRC, Line, Lobster, Matrix, Mattermost, Microsoft Teams, Nextcloud Talk, Nostr, Open Prose, Qwen Portal, Signal, Slack, Thread Ownership, Tlon, Twitch, Zalo, Zalo User
-- Diagnostics: OpenTelemetry
-- Memory: LanceDB
-- LLM: Task extension
-- Auth: Copilot Proxy, Google Antigravity
-
-**What we kept:**
-
-- Channels: Telegram (primary), Discord, WhatsApp
-- Core runtime, tool system, session management
-- Browser control, Canvas, Nodes
-- Cron/scheduling, sub-agents, memory system
-
-**Why fork?**
-
-- **Focus:** We only use Telegram/Discord/WhatsApp, no need for 20+ channel integrations
-- **Maintenance:** Smaller codebase = easier to understand and modify
-- **Customization:** Free to modify without worrying about upstream compatibility
-- **Stability:** Pin to known-good versions, update on our schedule
-
-## Our Setup
-
-**Platform:** Ubuntu 24.04 on AWS EC2 (16GB RAM, 8GB swap)  
-**Channels:** Telegram (primary), Discord (secondary), WhatsApp (backup)  
-**Models:** Claude Sonnet 4.5 (main), GPT-5-mini (sub-agents), Opus 4.6 (special tasks)  
-**Auth:** OAuth (Anthropic Pro Max, OpenAI subscription)
-
-**Features we use:**
-
-- Multi-agent orchestration (main Nova + developer/reviewer/tester sub-agents)
-- Kanban workflow via Nova Dashboard
-- Browser automation for testing
-- Cron jobs for scheduled tasks
-- Memory system (semantic search + daily logs)
-- Self-healing (watchdog + memory limits)
-
-**Features we don't:**
-
-- macOS/iOS/Android apps (headless server deployment)
-- Voice/speech (Telegram text-only)
-- Most channel integrations (removed)
-- Canvas/A2UI (not needed for our use case)
-
-## Installation
-
-### Quick Install (Recommended)
+### Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/install-claw-kernel.sh | bash
+curl -fsSL https://raw.githubusercontent.com/YOUR-USERNAME/claw-kernel/main/install-claw-kernel.sh | bash
 ```
 
-This will:
-
-- Check for Node.js 22+ (install if needed)
-- Install pnpm
-- Clone the repo to `~/claw-kernel`
-- Build and install globally
-- Prompt you to run `openclaw onboard`
-
-### Manual Installation
-
-If you prefer to install manually:
+Or install manually:
 
 ```bash
-# Clone the repo
-git clone https://github.com/victor-brechbill/claw-kernel.git ~/claw-kernel
+git clone https://github.com/YOUR-USERNAME/claw-kernel.git ~/claw-kernel
 cd ~/claw-kernel
-
-# Install dependencies and build
-pnpm install
-pnpm build
-
-# Install globally
+pnpm install && pnpm build
 npm install -g .
-
-# Run onboarding
-openclaw onboard
 ```
 
-### Requirements
+### Set up
 
-- Node.js 22 or newer
-- pnpm (auto-installed by the script)
-- Git
+```bash
+# Configure channels and API keys
+openclaw onboard
 
-### Next Steps
+# Start the gateway
+openclaw gateway start
 
-After installation:
+# (Optional) Install as a persistent service
+openclaw gateway install
+```
 
-1. Run `openclaw onboard` to configure channels and API keys
-2. Start the gateway: `openclaw gateway start`
-3. (Optional) Install as systemd service: `openclaw gateway install`
+### Verify
+
+```bash
+openclaw --version
+openclaw gateway status
+openclaw doctor
+```
+
+**Requirements:** Node.js 22+, Git. See the [Installation Guide](docs/distribution/installation.md) for full details.
 
 ## Configuration
 
-Located at: `~/.clawdbot/clawdbot.json`
-
-**Core config:**
+Located at `~/.openclaw/openclaw.json` (JSON5 format):
 
 ```json5
 {
-  agent: {
-    model: "anthropic/claude-sonnet-4-5",
-    thinking: "low",
+  agents: {
+    defaults: {
+      workspace: "~/.openclaw/workspace",
+    },
   },
   channels: {
     telegram: {
-      botToken: "...",
-      allowFrom: ["8348344586"],
+      botToken: "YOUR_BOT_TOKEN",
+      allowFrom: ["YOUR_USER_ID"],
     },
   },
 }
 ```
 
-### Server-side tools
-
-Anthropic server-side tools (web search, web fetch) run on Anthropic's servers — no API keys needed:
-
-```json5
-{
-  tools: {
-    serverTools: ["web_search_20260209", "web_fetch_20260209"],
-  },
-}
-```
-
-Only active with Anthropic models. Client-side tools (`web.search`, etc.) continue to work alongside.
-
-**⚠️ Config changes are dangerous!** Always backup before editing:
-
-```bash
-cp ~/.clawdbot/clawdbot.json ~/.clawdbot/clawdbot.json.bak
-```
-
-Invalid JSON = instant gateway death. Use `jq` to validate.
-
-## Development
-
-**Build from source:**
-
-```bash
-pnpm install
-pnpm build
-```
-
-**Run in dev mode (auto-reload):**
-
-```bash
-pnpm gateway:watch
-```
-
-**Add Sonnet 4.6 support:**
-
-```bash
-./scripts/patch-sonnet-4-6.sh
-```
-
-## Deployment
-
-**Rebuild after updates:**
-
-```bash
-cd ~/clawd/vault/dev/repos/nova-kernel
-git pull
-pnpm install
-pnpm build
-~/clawd/scripts/rebuild-kernel.sh  # Rebuilds + restarts gateway
-```
-
-**Rollback if something breaks:**
-
-```bash
-~/clawd/scripts/rollback-kernel.sh
-```
-
-## Key Paths
-
-- **Installed runtime:** `~/.npm-global/lib/node_modules/openclaw/`
-- **Config:** `~/.clawdbot/clawdbot.json`
-- **Workspace:** `~/clawd/` (Nova's home)
-- **Memory:** `~/clawd/memory/` (daily logs)
-- **Skills:** `~/clawd/skills/` (custom Nova skills)
-- **Logs:** `/tmp/openclaw/openclaw-*.log`
-
-## Maintenance
-
-**Check gateway health:**
-
-```bash
-systemctl --user status openclaw-gateway
-curl -s http://localhost:18789/health | jq .
-```
-
-**View logs:**
-
-```bash
-journalctl --user -u openclaw-gateway -f
-tail -f /tmp/openclaw/openclaw-*.log
-```
-
-**Restart gateway:**
-
-```bash
-systemctl --user restart openclaw-gateway
-```
-
-## Self-Healing
-
-Nova Kernel includes self-healing protections (implemented Feb 2026):
-
-- **Server watchdog:** Linux kernel watchdog monitors system health (60s timeout)
-- **Memory limits:** User processes capped at 12GB (4GB reserved for system)
-- **Swap space:** 8GB swap configured as safety net
-- **Health checks:** `/var/log/watchdog`, `/var/log/gateway-health.log`
-
-Auto-restart triggers on:
-
-- Event loop deadlock (>60s unresponsive)
-- Memory pressure (approaching OOM)
-- Network failure
-
-See: `~/clawd/SELF-HEALING-SUMMARY.md`
+Edit with `openclaw configure` (interactive) or directly. The gateway hot-reloads most changes automatically.
 
 ## Architecture
 
 ```
 Telegram / Discord / WhatsApp
-               │
-               ▼
-┌───────────────────────────────┐
-│      Nova Kernel Gateway      │
-│       (control plane)         │
-│     ws://127.0.0.1:18789      │
-└──────────────┬────────────────┘
-               │
-               ├─ Main agent (Nova)
-               ├─ Developer sub-agents
-               ├─ Code review sub-agents
-               ├─ Tester sub-agents
-               └─ Nova Dashboard (kanban)
+               |
+               v
++-------------------------------+
+|       Claw Kernel Gateway     |
+|        (control plane)        |
+|     ws://127.0.0.1:18789      |
++---------------+---------------+
+                |
+                +-- Main agent
+                +-- Developer sub-agents
+                +-- Code review sub-agents
+                +-- Tester sub-agents
+                +-- Dashboard (claw-interface)
 ```
+
+## Key Paths
+
+| Path                           | Purpose                         |
+| ------------------------------ | ------------------------------- |
+| `~/.openclaw/openclaw.json`    | Configuration                   |
+| `~/.openclaw/workspace/`       | Agent workspace, memory, skills |
+| `/tmp/openclaw/openclaw-*.log` | Runtime logs                    |
+
+## Development
+
+```bash
+pnpm install          # Install dependencies
+pnpm build            # Full build
+pnpm gateway:watch    # Dev mode with hot reload
+pnpm test             # Run tests
+pnpm check            # Format, lint, type check
+```
+
+## Maintenance
+
+```bash
+# Update to latest
+cd ~/claw-kernel && git pull && pnpm install && pnpm build
+
+# Restart gateway
+systemctl --user restart openclaw-gateway
+
+# Health check
+curl -s http://localhost:18789/health | jq .
+
+# View logs
+journalctl --user -u openclaw-gateway -f
+```
+
+## Documentation
+
+- **[Installation Guide](docs/distribution/installation.md)** — Prerequisites, install steps, verification
+- **[Setup Walkthrough](docs/distribution/setup-walkthrough.md)** — Production infrastructure checklist
+- **[Troubleshooting](docs/distribution/troubleshooting.md)** — Common issues, debug commands, getting help
+- **[OpenClaw Docs](https://docs.openclaw.ai)** — Full upstream documentation
+
+## Pre-Loaded Agent Configs
+
+Claw Kernel ships with ready-to-use agent configurations in `.agents/`:
+
+- **Developer agent** — Autonomous coding workflow: receives GitHub issues, creates branches, runs Claude Code, tests, and opens PRs
+- **Code reviewer agent** — 3-phase review process: requirements verification, code quality analysis, and decision (approve/request changes/comment)
+
+See `.agents/developer/AGENTS.md` and `.agents/code-reviewer/AGENTS.md` for full workflow documentation.
 
 ## Upstream
 
 This is a fork of **OpenClaw** by Peter Steinberger and the community.
 
-**Upstream repo:** https://github.com/openclaw/openclaw  
-**Docs:** https://docs.openclaw.ai  
-**Discord:** https://discord.gg/clawd
+- **Upstream:** <https://github.com/openclaw/openclaw>
+- **Docs:** <https://docs.openclaw.ai>
+- **Discord:** <https://discord.gg/clawd>
 
-Nova Kernel tracks upstream selectively — we merge features/fixes we need, but maintain our streamlined fork.
-
----
-
-**Built for Nova** ✨  
-_The Architect-Poet_
+Claw Kernel tracks upstream selectively — merging features and fixes as needed while maintaining a streamlined fork.
