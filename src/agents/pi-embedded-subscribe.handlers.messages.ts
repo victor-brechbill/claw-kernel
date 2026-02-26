@@ -228,7 +228,7 @@ export function handleMessageEnd(
   // Emit UX events for Anthropic server-side tool invocations (web_search, web_fetch).
   // These blocks are stored by the pi-ai patch but don't trigger client-side execution.
   if (Array.isArray(assistantMessage.content)) {
-    for (const block of assistantMessage.content as Record<string, unknown>[]) {
+    for (const block of assistantMessage.content as unknown as Record<string, unknown>[]) {
       if (block && typeof block === "object" && block.type === "server_tool_use") {
         const toolName = typeof block.name === "string" ? block.name : "server_tool";
         emitAgentEvent({
