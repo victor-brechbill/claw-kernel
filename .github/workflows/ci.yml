@@ -19,7 +19,7 @@ jobs:
       - uses: pnpm/action-setup@v4
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Create A2UI stub
         run: |
@@ -27,7 +27,7 @@ jobs:
           echo "// stub" > src/canvas-host/a2ui/a2ui.bundle.js
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Verify version
         run: node openclaw.mjs --version
