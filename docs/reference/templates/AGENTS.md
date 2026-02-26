@@ -122,9 +122,7 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 ## Tools
 
-Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
-
-**🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
+Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (device names, SSH details, API preferences) in `TOOLS.md`.
 
 **📝 Platform Formatting:**
 
@@ -162,10 +160,10 @@ You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it
 
 **Things to check (rotate through these, 2-4 times per day):**
 
-- **Emails** - Any urgent unread messages?
-- **Calendar** - Upcoming events in next 24-48h?
-- **Mentions** - Twitter/social notifications?
-- **Weather** - Relevant if your human might go out?
+- **Inbox** — Any urgent unread messages? (email, chat, notifications)
+- **Calendar** — Upcoming events in next 24-48h?
+- **Projects** — Any tasks, PRs, or deadlines needing attention?
+- **Environment** — Anything time-sensitive the user should know about?
 
 **Track your checks** in `memory/heartbeat-state.json`:
 

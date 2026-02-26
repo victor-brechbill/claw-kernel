@@ -13,29 +13,29 @@ Skills define _how_ tools work. This file is for _your_ specifics — the stuff 
 
 Things like:
 
-- Camera names and locations
+- Device names and locations
 - SSH hosts and aliases
-- Preferred voices for TTS
+- API keys and service endpoints
 - Speaker/room names
-- Device nicknames
-- Anything environment-specific
+- Environment-specific conventions
+- Anything the agent should know about your local setup
 
 ## Examples
 
 ```markdown
-### Cameras
+### Devices
 
-- living-room → Main area, 180° wide angle
-- front-door → Entrance, motion-triggered
+- living-room-speaker → Main area, Sonos
+- front-door-cam → Entrance, motion-triggered
 
 ### SSH
 
 - home-server → 192.168.1.100, user: admin
 
-### TTS
+### Services
 
-- Preferred voice: "Nova" (warm, slightly British)
-- Default speaker: Kitchen HomePod
+- TTS → ElevenLabs, preferred voice: "Rachel"
+- Search → Brave Search API
 ```
 
 ## Why Separate?
