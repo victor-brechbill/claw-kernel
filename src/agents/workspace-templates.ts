@@ -1,12 +1,32 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveOpenClawPackageRoot } from "../infra/openclaw-root.js";
 import { pathExists } from "../utils.js";
 
-const FALLBACK_TEMPLATE_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../docs/reference/templates",
-);
+function resolveFallbackTemplateDir(): string {
+  try {
+    let cursor = path.dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 8; i++) {
+      const candidate = path.join(cursor, "docs", "reference", "templates");
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+      const parent = path.dirname(cursor);
+      if (parent === cursor) {
+        break;
+      }
+      cursor = parent;
+    }
+  } catch {
+    // ignore
+  }
+  // Ultimate fallback: original relative path
+  return path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../docs/reference/templates",
+  );
+}
 
 let cachedTemplateDir: string | undefined;
 let resolvingTemplateDir: Promise<string> | undefined;
@@ -32,7 +52,7 @@ export async function resolveWorkspaceTemplateDir(opts?: {
     const candidates = [
       packageRoot ? path.join(packageRoot, "docs", "reference", "templates") : null,
       cwd ? path.resolve(cwd, "docs", "reference", "templates") : null,
-      FALLBACK_TEMPLATE_DIR,
+      resolveFallbackTemplateDir(),
     ].filter(Boolean) as string[];
 
     for (const candidate of candidates) {
@@ -42,7 +62,7 @@ export async function resolveWorkspaceTemplateDir(opts?: {
       }
     }
 
-    cachedTemplateDir = candidates[0] ?? FALLBACK_TEMPLATE_DIR;
+    cachedTemplateDir = candidates[0] ?? resolveFallbackTemplateDir();
     return cachedTemplateDir;
   })();
 

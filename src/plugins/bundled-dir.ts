@@ -19,10 +19,17 @@ export function resolveBundledPluginsDir(): string | undefined {
     // ignore
   }
 
-  // npm/dev: walk up from this module to find `extensions/` at the package root.
+  // npm/dev: walk up from this module to find extensions at the package root.
+  // Prefer compiled dist/extensions/ (reliable in global installs) over source extensions/.
   try {
     let cursor = path.dirname(fileURLToPath(import.meta.url));
     for (let i = 0; i < 6; i += 1) {
+      // Check for compiled extensions first
+      const distCandidate = path.join(cursor, "dist", "extensions");
+      if (fs.existsSync(distCandidate)) {
+        return distCandidate;
+      }
+      // Fall back to source extensions (dev mode)
       const candidate = path.join(cursor, "extensions");
       if (fs.existsSync(candidate)) {
         return candidate;

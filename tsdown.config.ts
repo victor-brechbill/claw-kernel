@@ -56,4 +56,12 @@ export default defineConfig([
     fixedExtension: false,
     platform: "node",
   },
+  {
+    entry: ["extensions/*/index.ts"],
+    outDir: "dist/extensions",
+    env,
+    fixedExtension: false,
+    platform: "node",
+    external: ["openclaw/plugin-sdk", "openclaw/plugin-sdk/account-id"],
+  },
 ]);
