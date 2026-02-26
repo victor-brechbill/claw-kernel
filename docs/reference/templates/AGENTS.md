@@ -52,6 +52,48 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - When you make a mistake → document it so future-you doesn't repeat it
 - **Text > Brain** 📝
 
+## Gateway Safety — CRITICAL
+
+### NEVER Run `systemctl stop openclaw.service`
+
+**This command kills the gateway process that hosts your session.** You have NO WAY to recover after running it — you're just gone, and your human must manually restart from outside.
+
+**Why this is fatal:**
+
+- You run INSIDE the gateway process
+- Stopping the gateway = stopping yourself
+- No recovery mechanism exists
+
+**What to do instead:**
+
+- For config changes: Use `gateway(action="config.patch")` or `gateway(action="restart")` — these have built-in safety
+- For emergency restart: ASK your human to restart from outside
+- For kernel rebuilds: Just rebuild — don't restart gateway (human can restart when ready)
+
+### Proper Restart Sequence
+
+If you absolutely must restart the gateway (rare — usually unnecessary):
+
+**NEVER:** `pkill clawdbot` alone — systemd restarts immediately, causing race conditions
+
+**CORRECT:**
+
+```bash
+systemctl --user stop openclaw.service
+pkill -9 clawdbot
+sleep 3
+systemctl --user start openclaw.service
+```
+
+### Config Safety
+
+Invalid JSON = instant death. **Always:**
+
+1. Backup first: `cp ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.bak`
+2. Use `jq` for edits (validates automatically)
+3. Prefer `config.patch` over `config.apply` (patch merges, apply replaces everything)
+4. Post a status update BEFORE making config changes (so your human knows what you were doing if it fails)
+
 ## Safety
 
 - Don't exfiltrate private data. Ever.
@@ -211,6 +253,50 @@ Periodically (every few days), use a heartbeat to:
 Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
+
+## Critical Patches & Updates
+
+### Post-Update Patch Workflow
+
+After updating claw-kernel (`npm update -g @claw/claw-kernel`), you may need to re-apply patches:
+
+**Check for patches:**
+
+1. Review `scripts/` directory for `patch-*.sh` scripts
+2. Check CHANGELOG.md for patch requirements
+3. Run applicable patches after updates
+
+**Common patches:**
+
+- Model library updates (new Claude models)
+- API compatibility fixes
+- Performance optimizations
+
+**When to patch:**
+
+- After major npm updates
+- When release notes mention patches
+- If you encounter known issues with documented patches
+
+**How to patch:**
+
+```bash
+# Example: Model library patch
+cd ~/.npm-global/lib/node_modules/openclaw/
+./scripts/patch-models.sh
+
+# Verify patch applied
+grep "new-model-name" src/models/library.ts
+```
+
+**Safety:**
+
+- Patches are non-destructive (can be re-applied)
+- Always backup config before patching
+- Test in development before production
+
+**Custom patches:**
+If you modify kernel source directly, document your patches in `~/patches/` so you can re-apply after updates.
 
 ## Make It Yours
 

@@ -9,7 +9,92 @@ read_when:
 
 _Onboarding complete. Now let's build out your production environment._
 
-Work through these infrastructure steps together. Check each box as you go. When all 10 are done, this file auto-removes.
+Work through these infrastructure steps together. Check each box as you go. When all are done, this file auto-removes.
+
+---
+
+## Repository Architecture
+
+Before you begin, understand how claw-kernel and claw-interface work together:
+
+### claw-kernel (Your OpenClaw Runtime)
+
+**What it is:** The OpenClaw runtime — the code that runs your agent.
+
+**What you should do:**
+
+- Install via npm: `npm install -g @claw/claw-kernel`
+- Monitor for updates: Watch the GitHub repo, pull updates regularly
+- Contribute bugfixes: Submit PRs for bugs you find
+- Fork only if adding major features — otherwise, stay on upstream
+
+**Updating:**
+
+```bash
+npm update -g @claw/claw-kernel
+```
+
+### claw-interface (Your Dashboard)
+
+**What it is:** The web dashboard for managing your agent, kanban board, system monitoring.
+
+**What you should do:**
+
+- Fork immediately: `git clone https://github.com/YOUR-USERNAME/claw-interface.git`
+- Customize freely: This is YOUR dashboard — change colors, add pages, modify layouts
+- Stay generic: Don't add hardcoded personal data (keep it configurable)
+- Pull upstream updates periodically if you want new features
+
+### Summary
+
+| Repo               | Install Method | Customization Strategy                         |
+| ------------------ | -------------- | ---------------------------------------------- |
+| **claw-kernel**    | npm install    | Stay on upstream, fork only for major features |
+| **claw-interface** | Fork & clone   | Fork immediately, customize freely             |
+
+---
+
+## Authentication & Token Management
+
+- [ ] **Set up OAuth token refresh** — Prevent agent death after 24h
+
+**Why this is critical:** Claude Code's OAuth token expires after ~24 hours. Without automatic refresh, your agent stops working silently.
+
+**Install scripts:**
+
+```bash
+# Copy scripts from claw-kernel
+mkdir -p ~/scripts ~/logs
+cp /path/to/claw-kernel/scripts/refresh-claude-token.sh ~/scripts/
+cp /path/to/claw-kernel/scripts/sync-oauth-tokens.sh ~/scripts/
+chmod +x ~/scripts/refresh-claude-token.sh ~/scripts/sync-oauth-tokens.sh
+```
+
+**Set up cron job (refreshes every 6 hours):**
+
+```bash
+crontab -e
+
+# Add this line:
+0 */6 * * * /home/YOUR-USERNAME/scripts/refresh-claude-token.sh >> /home/YOUR-USERNAME/logs/token-refresh.log 2>&1
+```
+
+**Verification:**
+
+```bash
+# Test manual refresh
+~/scripts/refresh-claude-token.sh
+
+# Check token expiry
+python3 -c "import json, datetime; c=json.load(open('$HOME/.claude/.credentials.json')); print('Expires:', datetime.datetime.fromtimestamp(c['claudeAiOauth']['expiresAt']/1000))"
+
+# Verify cron entry
+crontab -l | grep refresh-claude-token
+```
+
+**Without this, your agent will stop responding after ~24 hours when the OAuth token expires.**
+
+---
 
 ## Dashboard
 
@@ -39,7 +124,32 @@ npm run deploy
 
 **Reference:** See claw-interface README for deployment options (Vercel, self-hosted, etc.)
 
-## Security
+## Security Hardening
+
+- [ ] **Harden SSH access** — Disable password auth, use keys only
+
+```bash
+# Edit SSH config
+sudo nano /etc/ssh/sshd_config
+
+# Set these values:
+# PasswordAuthentication no
+# PubkeyAuthentication yes
+# PermitRootLogin no
+
+# Restart SSH
+sudo systemctl restart sshd
+```
+
+**Verification:** Try password login from another machine — it should fail.
+
+- [ ] **Install fail2ban** — Auto-ban brute force attempts
+
+```bash
+sudo apt-get install -y fail2ban
+sudo systemctl enable fail2ban
+sudo systemctl start fail2ban
+```
 
 - [ ] **Confirm closed ports (Security)** — Harden your server by closing unnecessary ports. Only essential services should be accessible.
 
@@ -63,6 +173,43 @@ To                         Action      From
 ```
 
 **Verification:** Run `nmap localhost` - should show minimal open ports
+
+- [ ] **Install gitleaks** — Secret scanning for repositories
+
+```bash
+# Install gitleaks
+wget https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.21.2_linux_x64.tar.gz
+tar -xzf gitleaks_8.21.2_linux_x64.tar.gz
+sudo mv gitleaks /usr/local/bin/
+rm gitleaks_8.21.2_linux_x64.tar.gz
+
+# Verify
+gitleaks version
+```
+
+- [ ] **Set up pre-commit hooks** — Prevent secret commits
+
+```bash
+# In each project repo
+cd ~/your-project
+cp /path/to/claw-kernel/scripts/setup-precommit.sh .
+chmod +x setup-precommit.sh
+./setup-precommit.sh
+```
+
+**Verification:**
+
+```bash
+# Test gitleaks
+cd ~/your-project
+gitleaks detect
+
+# Test pre-commit hook (should block the commit)
+echo "PASSWORD=secret123" > test-secret.txt
+git add test-secret.txt
+git commit -m "test"  # Should fail with gitleaks error
+rm test-secret.txt
+```
 
 - [ ] **Configure Cloudflare Zero Trust** — Set up Cloudflare tunnel for secure access without exposing ports.
 
@@ -90,6 +237,64 @@ cloudflared tunnel create YOUR-TUNNEL-NAME
 4. Test tunnel connectivity
 
 **Reference:** https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
+
+## Backup System
+
+- [ ] **Set up Google Drive backup sync** — Protect against data loss
+
+**Install rclone:**
+
+```bash
+curl https://rclone.org/install.sh | sudo bash
+```
+
+**Configure Google Drive:**
+
+```bash
+# Interactive setup
+rclone config
+
+# Create remote named "gdrive"
+# Select: Google Drive
+# Follow OAuth flow
+```
+
+**Install backup script:**
+
+```bash
+cp /path/to/claw-kernel/scripts/backup-to-gdrive.sh ~/scripts/
+chmod +x ~/scripts/backup-to-gdrive.sh
+
+# Test backup
+~/scripts/backup-to-gdrive.sh
+```
+
+**Schedule daily backups:**
+
+```bash
+crontab -e
+
+# Daily backup at 4am
+0 4 * * * /home/YOUR-USERNAME/scripts/backup-to-gdrive.sh >> /home/YOUR-USERNAME/logs/backup.log 2>&1
+```
+
+**What gets backed up:**
+
+- Workspace files (MEMORY.md, daily logs, config)
+- OpenClaw config (`~/.openclaw/`)
+- Skills and agent configurations
+
+**Verification:**
+
+```bash
+# Check GDrive folder
+rclone ls gdrive:OpenClaw-Backup/
+
+# Check backup log
+tail ~/logs/backup.log
+```
+
+**Recovery:** See `docs/recovery.md` for restore procedures.
 
 ## Resource Management
 
@@ -149,22 +354,65 @@ chmod +x ~/check-disk-space.sh
 crontab -l | grep check-disk-space
 ```
 
+## Monitoring & Health Checks
+
+- [ ] **Set up gateway watchdog** — Auto-restart on deadlock
+
+**Install watchdog script:**
+
+```bash
+cp /path/to/claw-kernel/scripts/gateway-watchdog.sh ~/scripts/
+chmod +x ~/scripts/gateway-watchdog.sh
+```
+
+**Schedule watchdog (every 5 minutes):**
+
+```bash
+crontab -e
+
+# Check every 5 minutes
+*/5 * * * * /home/YOUR-USERNAME/scripts/gateway-watchdog.sh >> /home/YOUR-USERNAME/logs/watchdog.log 2>&1
+```
+
+**What it does:**
+
+- Checks the gateway health endpoint with a 30-second timeout
+- Restarts the service automatically if unresponsive
+- Logs all actions for debugging
+
+**Verification:**
+
+```bash
+# Test watchdog
+~/scripts/gateway-watchdog.sh
+
+# Check watchdog log
+tail ~/logs/watchdog.log
+```
+
 ## Automation
 
 - [ ] **Schedule cron jobs** — Set up both system-level and OpenClaw cron jobs for automated maintenance.
 
-**System Cron Jobs** (server maintenance):
+**Complete cron setup (combines all scripts from above):**
 
 ```bash
-# Edit system crontab
-sudo crontab -e
+crontab -e
 
-# Add these jobs:
-# Refresh authentication tokens (daily at 2am)
-0 2 * * * /home/YOUR-USERNAME/scripts/refresh-tokens.sh
+# === Token Management ===
+# Refresh OAuth tokens every 6 hours
+0 */6 * * * /home/YOUR-USERNAME/scripts/refresh-claude-token.sh >> /home/YOUR-USERNAME/logs/token-refresh.log 2>&1
 
-# Backup configuration (daily at 3am)
-0 3 * * * /home/YOUR-USERNAME/scripts/backup-config.sh
+# === Backup ===
+# Daily backup at 4am
+0 4 * * * /home/YOUR-USERNAME/scripts/backup-to-gdrive.sh >> /home/YOUR-USERNAME/logs/backup.log 2>&1
+
+# === Monitoring ===
+# Gateway watchdog every 5 minutes
+*/5 * * * * /home/YOUR-USERNAME/scripts/gateway-watchdog.sh >> /home/YOUR-USERNAME/logs/watchdog.log 2>&1
+
+# Disk space check daily at 9am
+0 9 * * * /home/YOUR-USERNAME/check-disk-space.sh >> /home/YOUR-USERNAME/logs/disk-check.log 2>&1
 ```
 
 **OpenClaw Cron Jobs** (agent behaviors):
@@ -177,11 +425,8 @@ Configure in OpenClaw's HEARTBEAT.md:
 **Verification:**
 
 ```bash
-# System cron
-sudo crontab -l
-
-# OpenClaw cron
-cat ~/HEARTBEAT.md
+# Verify all cron entries
+crontab -l
 ```
 
 - [ ] **Set up daily brief** — Configure the morning brief with your preferences.
@@ -210,7 +455,7 @@ cat ~/HEARTBEAT.md
 
 1. Create new GitHub account (e.g., YOUR-BOT-NAME)
 2. Generate Personal Access Token (PAT):
-   - Go to Settings → Developer settings → Personal access tokens
+   - Go to Settings > Developer settings > Personal access tokens
    - Create token with `repo` scope
 3. Store token securely in Bitwarden (see next step)
 4. Add token to OpenClaw configuration:
@@ -260,6 +505,80 @@ chmod 600 ~/.config/openclaw/encryption-key
 
 **Reference:** https://bitwarden.com/help/cli/
 
+## Understanding the Coding Workflow
+
+- [ ] **Read and understand the coding workflow** — How your agent develops code autonomously
+
+OpenClaw's coding workflow uses **orchestration** — you don't write code directly, you spawn specialized developer agents that use Claude Code.
+
+**The Flow:**
+
+1. **PRD Creation** — Define what needs to be built (Product Requirements Document)
+2. **Developer Agent** — Spawns in isolated session, uses Claude Code to implement
+3. **Code Review Agent** — Reviews the PR, checks tests, validates requirements
+4. **Merge** — Main agent approves and merges after review passes
+
+**Files involved:**
+
+- `skills/coding/SKILL.md` — Your orchestration manual (read this!)
+- `.agents/developer/AGENTS.md` — Developer agent's instructions
+- `.agents/code-reviewer/AGENTS.md` — Reviewer agent's instructions
+- `HEARTBEAT.md` — Kanban workflow checklist
+
+**Key concepts:**
+
+- **Kanban board** — Cards move through: backlog > in_progress > review > done
+- **PRDs** — Every significant task needs a PRD before work begins
+- **Definition of Done** — PR created, tests pass, review passes, then merge
+- **Quality over speed** — Always implement reviewer suggestions
+
+**Getting started:**
+
+1. Read `docs/skills/coding.md` for the full guide
+2. Create a test card on your kanban board
+3. Write a simple PRD
+4. Spawn a developer agent and watch the flow
+5. Review the PR, merge it
+
+## Memory System
+
+- [ ] **Understand the memory system** — How your agent remembers across sessions
+
+**Two types of memory:**
+
+1. **Short-term (Daily Logs)** — `memory/YYYY-MM-DD.md`
+   - Raw notes from each day
+   - Session context, decisions, events
+   - Automatically created by your agent
+   - Kept for reference, reviewed periodically
+
+2. **Long-term (Curated Memory)** — `MEMORY.md`
+   - Distilled insights, lessons learned, important context
+   - Updated by your agent (you review and curate)
+   - Loaded every session (this is your persistent memory)
+   - Think of it like a human's long-term memory
+
+**How it works:**
+
+- Your agent wakes up fresh each session (no memory of previous sessions)
+- First action: Read `MEMORY.md` + recent daily logs
+- As session progresses: Write to today's daily log
+- Periodically: Review daily logs, update `MEMORY.md` with important insights
+
+**Files:**
+
+- `MEMORY.md` — Your curated long-term memory
+- `memory/YYYY-MM-DD.md` — Daily raw logs (auto-created)
+- `AGENTS.md` — Instructions include "Read MEMORY.md every session"
+
+**Why this matters:**
+
+- Memory = continuity across sessions
+- Without MEMORY.md, your agent starts from zero every time
+- With MEMORY.md, your agent learns and improves over time
+
+**No setup required** — The system is already in place. Just understand how it works.
+
 ## Testing
 
 - [ ] **Test interface + workflow** — Verify the complete workflow end-to-end.
@@ -292,11 +611,11 @@ chmod 600 ~/.config/openclaw/encryption-key
 
 **Success criteria:**
 
-- ✅ Dashboard shows real-time agent status
-- ✅ Can create and track tasks through web interface
-- ✅ Agents can autonomously complete coding tasks
-- ✅ PRs are created and linked to task cards
-- ✅ Notifications arrive as expected
+- Dashboard shows real-time agent status
+- Can create and track tasks through web interface
+- Agents can autonomously complete coding tasks
+- PRs are created and linked to task cards
+- Notifications arrive as expected
 
 ---
 
