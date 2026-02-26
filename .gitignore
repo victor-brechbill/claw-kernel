@@ -3,7 +3,7 @@ node_modules
 .env
 docker-compose.extra.yml
 dist
-pnpm-lock.yaml
+# pnpm-lock.yaml should be committed to track exact dependency versions
 bun.lock
 bun.lockb
 coverage
