@@ -59,23 +59,53 @@ This is Nova's kernel — the core runtime that powers Nova, Victor's personal A
 
 ## Installation
 
-This repo is not meant for public use — it's Nova's personal runtime. If you want to run your own AI assistant, use upstream [OpenClaw](https://github.com/openclaw/openclaw).
-
-**For Nova's deployment:**
+### Quick Install (Recommended)
 
 ```bash
-cd ~/clawd/vault/dev/repos/nova-kernel
+curl -fsSL https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/install-claw-kernel.sh | bash
+```
+
+This will:
+
+- Check for Node.js 22+ (install if needed)
+- Install pnpm
+- Clone the repo to `~/claw-kernel`
+- Build and install globally
+- Prompt you to run `openclaw onboard`
+
+### Manual Installation
+
+If you prefer to install manually:
+
+```bash
+# Clone the repo
+git clone https://github.com/victor-brechbill/claw-kernel.git ~/claw-kernel
+cd ~/claw-kernel
+
+# Install dependencies and build
 pnpm install
 pnpm build
-pnpm openclaw gateway start
+
+# Install globally
+npm install -g .
+
+# Run onboarding
+openclaw onboard
 ```
 
-**Production deployment uses systemd:**
+### Requirements
 
-```bash
-systemctl --user status openclaw-gateway
-systemctl --user restart openclaw-gateway
-```
+- Node.js 22 or newer
+- pnpm (auto-installed by the script)
+- Git
+
+### Next Steps
+
+After installation:
+
+1. Run `openclaw onboard` to configure channels and API keys
+2. Start the gateway: `openclaw gateway start`
+3. (Optional) Install as systemd service: `openclaw gateway install`
 
 ## Configuration
 
