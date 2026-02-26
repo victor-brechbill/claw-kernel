@@ -174,7 +174,7 @@ cloudflared tunnel run my-agent-tunnel
 
 ```bash
 # Edit the systemd service override
-sudo systemctl edit openclaw-gateway.service
+systemctl --user edit openclaw-gateway.service
 ```
 
 Add these lines:
@@ -187,14 +187,14 @@ MemoryHigh=3.5G
 
 ```bash
 # Apply changes
-sudo systemctl daemon-reload
-sudo systemctl restart openclaw-gateway.service
+systemctl --user daemon-reload
+systemctl --user restart openclaw-gateway.service
 ```
 
 **Expected outcome:**
 
 ```bash
-systemctl show openclaw-gateway.service | grep Memory
+systemctl --user show openclaw-gateway.service | grep Memory
 # MemoryMax=4294967296 (4G)
 # MemoryHigh=3758096384 (3.5G)
 ```

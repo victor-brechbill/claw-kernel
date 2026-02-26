@@ -159,8 +159,8 @@ See `.agents/developer/AGENTS.md` and `.agents/code-reviewer/AGENTS.md` for full
 
 This is a fork of **OpenClaw** by Peter Steinberger and the community.
 
-- **Upstream:** https://github.com/openclaw/openclaw
-- **Docs:** https://docs.openclaw.ai
-- **Discord:** https://discord.gg/clawd
+- **Upstream:** <https://github.com/openclaw/openclaw>
+- **Docs:** <https://docs.openclaw.ai>
+- **Discord:** <https://discord.gg/clawd>
 
 Claw Kernel tracks upstream selectively — merging features and fixes as needed while maintaining a streamlined fork.

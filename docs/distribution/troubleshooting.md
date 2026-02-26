@@ -298,6 +298,7 @@ ps aux | grep openclaw | grep -v grep
 - Set systemd memory limits (see [Setup Walkthrough](./setup-walkthrough.md#4-set-up-ram-limits))
 - Reduce concurrent sessions: `openclaw config set session.maxConcurrent 3`
 - Add swap space as a safety net:
+
   ```bash
   sudo fallocate -l 8G /swapfile
   sudo chmod 600 /swapfile
