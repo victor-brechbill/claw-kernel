@@ -155,6 +155,30 @@ Claw Kernel ships with ready-to-use agent configurations in `.agents/`:
 
 See `.agents/developer/AGENTS.md` and `.agents/code-reviewer/AGENTS.md` for full workflow documentation.
 
+## Coding Workflow
+
+Claw Kernel includes a complete **coding orchestration system** that enables autonomous development:
+
+- **Developer agents** — Implement features using Claude Code in isolated sessions
+- **Code review agents** — Review PRs for quality, correctness, and security
+- **Kanban integration** — Track work through backlog > in_progress > review > done
+- **PRD-driven** — Every task starts with a Product Requirements Document
+
+**Workflow:**
+
+1. Create card on kanban board
+2. Write PRD defining requirements
+3. Main agent spawns developer — implements feature — creates PR
+4. Main agent spawns reviewer — reviews code — approves or requests changes
+5. Main agent merges PR after approval
+
+**Documentation:**
+
+- [Coding Workflow Guide](docs/skills/coding.md) — Complete orchestration guide
+- [Developer Agent Config](.agents/developer/AGENTS.md) — How developers work
+- [Code Reviewer Config](.agents/code-reviewer/AGENTS.md) — Review process
+- [Recovery Guide](docs/recovery.md) — Backup and restore procedures
+
 ## Upstream
 
 This is a fork of **OpenClaw** by Peter Steinberger and the community.
