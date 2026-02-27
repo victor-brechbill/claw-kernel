@@ -73,10 +73,15 @@ apps/ios/*.mobileprovision
 # Local untracked files
 .local/
 docs/.local/
-IDENTITY.md
-USER.md
 .tgz
 .idea
+
+# Agent workspace files (user-specific, don't commit)
+# But allow them in docs/reference/templates/ (those are distribution templates)
+/**/workspace*/IDENTITY.md
+/**/workspace*/USER.md
+/.openclaw/workspace*/IDENTITY.md
+/.openclaw/workspace*/USER.md
 
 # local tooling
 .serena/
