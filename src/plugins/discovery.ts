@@ -138,6 +138,11 @@ function discoverInDirectory(params: {
   for (const entry of entries) {
     const fullPath = path.join(params.dir, entry.name);
     if (entry.isFile()) {
+      // Skip .js files in bundled extensions directory (these are shared chunks from the bundler)
+      // Only individual plugin subdirectories should be scanned
+      if (params.origin === "bundled") {
+        continue;
+      }
       if (!isExtensionFile(fullPath)) {
         continue;
       }
