@@ -795,30 +795,53 @@ grep "PasswordAuthentication no" /etc/ssh/sshd_config
 
 **Why it matters:** Gateway can freeze (event loop deadlock). Watchdog recovers automatically.
 
+**How it works:**
+
+- Runs every 5 minutes via cron
+- Checks if gateway health endpoint responds within 30 seconds
+- If unresponsive, automatically restarts the gateway
+- Logs all activity to `~/clawd/logs/gateway-watchdog.log`
+
 **Implementation:**
 
 ```bash
-# Install healthcheck script
-curl -o ~/clawd/scripts/healthcheck-gateway.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/healthcheck-gateway.sh
+# Create logs directory if it doesn't exist
+mkdir -p ~/clawd/logs
 
-chmod +x ~/clawd/scripts/healthcheck-gateway.sh
+# Download the official watchdog script (DO NOT write your own!)
+curl -o ~/clawd/scripts/gateway-watchdog.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/gateway-watchdog.sh
+
+chmod +x ~/clawd/scripts/gateway-watchdog.sh
 
 # Add to cron (runs every 5 minutes)
-(crontab -l 2>/dev/null; echo "*/5 * * * * ~/clawd/scripts/healthcheck-gateway.sh >> ~/clawd/logs/gateway-health.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "*/5 * * * * ~/clawd/scripts/gateway-watchdog.sh >> ~/clawd/logs/gateway-watchdog.log 2>&1") | crontab -
 ```
+
+**Important:** Always use the official `gateway-watchdog.sh` script from the repository. Do not write your own watchdog script - the official one is tested and handles edge cases correctly.
 
 **Verify:**
 
 ```bash
-# Test healthcheck
-~/clawd/scripts/healthcheck-gateway.sh
+# Check cron job is installed
+crontab -l | grep gateway-watchdog
 
-# Check cron job
-crontab -l | grep healthcheck-gateway
+# Check the script exists and is executable
+ls -l ~/clawd/scripts/gateway-watchdog.sh
+
+# Test the watchdog script manually (should complete without errors if gateway is healthy)
+~/clawd/scripts/gateway-watchdog.sh
+
+# Check gateway health endpoint directly
+curl -sf http://localhost:18789/health
+
+# After 5 minutes, check the watchdog log
+tail ~/clawd/logs/gateway-watchdog.log
 ```
 
-- [ ] Gateway health monitoring cron job installed
+- [ ] Gateway watchdog script downloaded and executable
+- [ ] Cron job installed (runs every 5 minutes)
+- [ ] Verified script runs without errors
 
 ---
 
