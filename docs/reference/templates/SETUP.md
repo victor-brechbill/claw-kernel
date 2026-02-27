@@ -930,50 +930,62 @@ rm bw.zip
 bw --version
 ```
 
-3. **Set up encrypted master key storage:**
+3. **Set up encrypted password storage (Python scripts from passwords skill):**
 
 ```bash
-# Create secure directory
-mkdir -p ~/clawd/vault/.secrets
-chmod 700 ~/clawd/vault/.secrets
+# Create secure vault directory
+mkdir -p ~/clawd/vault
+chmod 700 ~/clawd/vault
 
-# Store Bitwarden master password (encrypted with script)
-# You'll be prompted for the master password
-~/clawd/scripts/encrypt-master-key.sh
+# Download password encryption scripts
+mkdir -p ~/clawd/skills/passwords/scripts
+curl -o ~/clawd/skills/passwords/scripts/encrypt.py \
+  https://raw.githubusercontent.com/victor-brechbill/nova-kernel/main/skills/passwords/scripts/encrypt.py
 
-# Verify encryption worked
-ls -la ~/clawd/vault/.secrets/
-# Should see: master_key.enc
+curl -o ~/clawd/skills/passwords/scripts/decrypt.py \
+  https://raw.githubusercontent.com/victor-brechbill/nova-kernel/main/skills/passwords/scripts/decrypt.py
+
+chmod +x ~/clawd/skills/passwords/scripts/*.py
+
+# Generate encryption key
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ~/clawd/skills/passwords/.key
+chmod 600 ~/clawd/skills/passwords/.key
+
+# Encrypt and store Bitwarden master password
+python3 ~/clawd/skills/passwords/scripts/encrypt.py "YOUR_BITWARDEN_PASSWORD"
+# This creates ~/clawd/vault/.credentials (encrypted)
 ```
 
 4. **Test vault access:**
 
 ```bash
-# Unlock vault (uses encrypted master key)
-export BW_SESSION=$(~/clawd/scripts/unlock-bitwarden.sh)
+# Decrypt password (copies to clipboard, auto-clears after 30s)
+python3 ~/clawd/skills/passwords/scripts/decrypt.py
 
-# List items (should show empty vault for now)
+# Or unlock Bitwarden directly (recommended - no clipboard exposure)
+python3 ~/clawd/skills/passwords/scripts/decrypt.py --bw-unlock
+
+# Test: List vault items
 bw list items
 
-# Lock vault
+# Lock vault when done
 bw lock
-unset BW_SESSION
 ```
 
 **What to store in Bitwarden:**
 
 - GitHub personal access tokens
 - Google OAuth credentials
-- API keys (Brave Search, etc.)
+- API keys (if any)
 - Bot email password
 - Database passwords
 - Any other secrets
 
-**Usage pattern:**
+**Usage pattern (when bot needs credentials):**
 
 ```bash
-# 1. Unlock vault
-export BW_SESSION=$(~/clawd/scripts/unlock-bitwarden.sh)
+# 1. Unlock vault (using encrypted password)
+export BW_SESSION=$(python3 ~/clawd/skills/passwords/scripts/decrypt.py --bw-unlock | bw unlock --raw)
 
 # 2. Retrieve secret
 PASSWORD=$(bw get password "GitHub PAT")
@@ -991,7 +1003,8 @@ unset BW_SESSION
 - Never write passwords to plain text files
 - Never echo passwords to stdout/logs
 - Always lock vault after use
-- Encrypted master key file should NEVER be committed to git
+- Encrypted credentials file should NEVER be committed to git
+- Add to `.gitignore`: `vault/.credentials`, `skills/passwords/.key`
 
 **Verify:**
 
@@ -999,17 +1012,21 @@ unset BW_SESSION
 # Check Bitwarden CLI installed
 bw --version
 
-# Check encrypted master key exists
-ls -la ~/clawd/vault/.secrets/master_key.enc
+# Check encryption key exists
+ls -la ~/clawd/skills/passwords/.key
 
-# Test unlock script works
-~/clawd/scripts/unlock-bitwarden.sh && echo "Success"
+# Check encrypted credentials exist
+ls -la ~/clawd/vault/.credentials
+
+# Test decrypt (should copy password to clipboard)
+python3 ~/clawd/skills/passwords/scripts/decrypt.py && echo "✓ Decrypt works"
 ```
 
 - [ ] Bitwarden account created
 - [ ] Bitwarden CLI installed
-- [ ] Master key encrypted and stored
-- [ ] Tested vault unlock/lock
+- [ ] Encryption key generated
+- [ ] Master password encrypted and stored
+- [ ] Tested decrypt/unlock
 
 ---
 
@@ -1200,13 +1217,29 @@ curl -sf https://dashboard.yourdomain.com && echo "✓ Public OK"
 
 ---
 
-### ✅ Step 18: Gmail OAuth Setup
+### ✅ Step 18: Gmail OAuth Setup (gog CLI)
 
-**What this is:** OAuth credentials for bot to read/send emails via Gmail API
+**What this is:** OAuth credentials for bot to read/send emails via Gmail API using `gog` CLI
 
 **Why it matters:** Your bot can monitor emails, send notifications, and handle correspondence automatically.
 
-**Step 1: Create Google Cloud Project**
+**Step 1: Install gog CLI**
+
+```bash
+# Install via Homebrew (Linux)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to PATH
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+# Install gog
+brew install steipete/tap/gogcli
+
+# Verify installation
+gog --version
+```
+
+**Step 2: Create Google Cloud Project**
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
 2. Create new project: "Bot Gmail Access"
@@ -1215,245 +1248,291 @@ curl -sf https://dashboard.yourdomain.com && echo "✓ Public OK"
    - Search "Gmail API"
    - Click "Enable"
 
-**Step 2: Create OAuth credentials**
+**Step 3: Create OAuth credentials (Desktop app)**
 
 1. Go to "APIs & Services" → "Credentials"
 2. Click "Create Credentials" → "OAuth client ID"
-3. Application type: "Desktop app"
+3. Application type: **Desktop app**
 4. Name: "Bot Gmail Access"
 5. Click "Create"
 6. Download credentials JSON file
 7. Save as `~/clawd/vault/.secrets/gmail-credentials.json`
 
-**Step 3: Configure OAuth consent screen**
+**Step 4: Configure OAuth consent screen**
 
 1. Go to "OAuth consent screen"
 2. User type: "Internal" (if using Google Workspace) or "External"
 3. App name: "Bot Gmail Access"
 4. User support email: your bot's email
-5. Scopes: Add Gmail scopes:
-   - `gmail.readonly` (read emails)
-   - `gmail.send` (send emails)
-   - `gmail.modify` (mark as read, archive, etc.)
+5. Scopes: Add Gmail scopes (click "Add or Remove Scopes"):
+   - `https://www.googleapis.com/auth/gmail.readonly`
+   - `https://www.googleapis.com/auth/gmail.send`
+   - `https://www.googleapis.com/auth/gmail.modify`
+6. Save and continue
 
-**Step 4: Authorize bot**
+**Step 5: Authorize bot with gog**
 
 ```bash
-# Install Gmail authentication script
-curl -o ~/clawd/scripts/gmail-auth.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/gmail-auth.sh
+# Set credentials file path
+export GOG_CREDENTIALS_FILE=~/clawd/vault/.secrets/gmail-credentials.json
 
-chmod +x ~/clawd/scripts/gmail-auth.sh
+# Add bot's Gmail account (opens browser for OAuth)
+gog auth add bot@yourdomain.com --services gmail
 
-# Run OAuth flow (opens browser)
-~/clawd/scripts/gmail-auth.sh authorize
+# Follow prompts:
+# - Sign in with bot's Google account
+# - Accept permissions
+# - OAuth token saved automatically
 
-# Follow prompts to sign in with bot's Google account
-# Accept permissions
-# Script saves refresh token to Bitwarden
+# Verify authentication
+gog auth list
 ```
 
-**Step 5: Test Gmail access**
+**Step 6: Test Gmail access**
 
 ```bash
+# Set default account (to avoid --account flag every time)
+export GOG_ACCOUNT=bot@yourdomain.com
+
 # List recent emails
-~/clawd/scripts/gmail-list.sh --max 10
+gog gmail search 'newer_than:7d' --max 10
 
 # Send test email
-~/clawd/scripts/gmail-send.sh \
+gog gmail send \
   --to "you@example.com" \
   --subject "Test from bot" \
   --body "Gmail access working!"
+
+# Search for specific sender
+gog gmail search 'from:important@example.com is:unread' --max 5
+```
+
+**Add to shell config for persistence:**
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+echo 'export GOG_ACCOUNT=bot@yourdomain.com' >> ~/.bashrc
+echo 'export GOG_CREDENTIALS_FILE=~/clawd/vault/.secrets/gmail-credentials.json' >> ~/.bashrc
+
+source ~/.bashrc
 ```
 
 **Verify:**
 
 ```bash
-# OAuth credentials exist
+# Check gog installed
+gog --version
+
+# Check credentials file exists
 ls -la ~/clawd/vault/.secrets/gmail-credentials.json
 
-# Test list emails
-~/clawd/scripts/gmail-list.sh --max 1 && echo "✓ Read access OK"
+# Check bot is authenticated
+gog auth list | grep "bot@yourdomain.com"
 
-# Check refresh token in Bitwarden
-bw list items | grep "Gmail Refresh Token"
+# Test read access
+gog gmail search 'newer_than:1d' --max 1 && echo "✓ Read access OK"
 ```
 
+- [ ] gog CLI installed
 - [ ] Google Cloud project created
 - [ ] Gmail API enabled
-- [ ] OAuth credentials downloaded
-- [ ] Bot authorized via OAuth flow
+- [ ] OAuth credentials (Desktop app) downloaded
+- [ ] Bot authenticated via gog
 - [ ] Tested email read/send
+- [ ] GOG_ACCOUNT exported in shell config
 
 ---
 
 ### ✅ Step 19: Email Monitoring Cron
 
-**What this is:** Periodic email check for urgent messages
+**What this is:** Periodic email check for urgent messages using wake events
 
-**Why it matters:** Your bot can respond to emails automatically or notify you of important messages.
+**Why it matters:** Your bot can monitor Gmail and notify you of important messages automatically.
 
 **How it works:**
 
-1. Cron runs every hour
-2. Script checks for unread emails
-3. Filters by priority:
-   - From specific senders (your allowlist)
-   - Marked as important
-   - Certain subject keywords
+1. Cron wake event fires every hour
+2. Bot uses `gog gmail search` to check for unread emails
+3. Bot filters by priority (specific senders, keywords, importance)
 4. Bot notifies you via Telegram if urgent email detected
-5. Bot can auto-respond to specific email types
+5. Bot can draft/send auto-responses if configured
+
+**No script needed - bot uses `gog` CLI directly via wake prompt**
 
 **Implementation:**
 
 ```bash
-# Download email monitoring script
-curl -o ~/clawd/scripts/email-monitor.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/email-monitor.sh
-
-chmod +x ~/clawd/scripts/email-monitor.sh
-
-# Configure email filters (edit this file)
-cat > ~/clawd/.email-filters.json << 'EOF'
-{
-  "priority_senders": [
-    "boss@company.com",
-    "client@important.com"
-  ],
-  "priority_keywords": [
-    "urgent",
-    "asap",
-    "emergency"
-  ],
-  "auto_reply_patterns": {
-    "out of office": "I'm currently away...",
-    "meeting request": "Please check my calendar..."
-  }
-}
+# Create priority senders list (optional - bot can also check all unread)
+cat > ~/clawd/.email-priority-senders << 'EOF'
+boss@company.com
+client@important.com
+partner@business.com
 EOF
 
 # Add to cron (runs every hour)
-(crontab -l 2>/dev/null; echo "0 * * * * ~/clawd/scripts/email-monitor.sh >> ~/clawd/logs/email-monitor.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "0 * * * * curl -X POST http://localhost:18789/api/cron/wake -H 'Content-Type: application/json' -d '{\"text\":\"Check Gmail for urgent emails. Use gog gmail search is:unread newer_than:1h. If emails from priority senders in ~/.email-priority-senders or with urgent/ASAP keywords, notify me via Telegram with sender, subject, and preview. Log checks to ~/clawd/logs/email-monitor.log.\"}' >> ~/clawd/logs/email-monitor.log 2>&1") | crontab -
 ```
 
-**What the bot does:**
+**What the bot does each hour:**
 
-- **Silent monitoring** - Most emails are just logged, no notification
-- **Priority alert** - Urgent emails trigger Telegram message to you
-- **Auto-respond** - Optional: Bot can reply to specific email patterns
-- **Smart filtering** - Learns from your responses over time
+1. Searches Gmail: `gog gmail search 'is:unread newer_than:1h'`
+2. Checks against priority senders list (if exists)
+3. Looks for urgent keywords (ASAP, urgent, emergency)
+4. If priority email found:
+   - Sends you Telegram notification with sender/subject/preview
+   - Logs the email
+5. If routine email:
+   - Silent (just logs the check)
+
+**Customizing filters:**
+
+Edit the wake event prompt in your cron job to change behavior:
+
+- Add more keywords: `urgent|ASAP|emergency|time-sensitive`
+- Change frequency: `0 */2 * * *` for every 2 hours
+- Add auto-reply: Include instruction like "reply with out-of-office message"
 
 **Verify:**
 
 ```bash
-# Test email monitor manually
-~/clawd/scripts/email-monitor.sh --dry-run
-
 # Check cron job installed
 crontab -l | grep email-monitor
 
-# Send yourself a test "urgent" email and wait for notification
+# Test manually (trigger wake event now)
+curl -X POST http://localhost:18789/api/cron/wake -H 'Content-Type: application/json' -d '{"text":"Check Gmail for urgent emails. Use gog gmail search is:unread newer_than:1h. If any unread, send me a test notification."}'
+
+# Check bot responded
+tail ~/clawd/logs/email-monitor.log
 ```
 
-- [ ] Email monitoring script installed
-- [ ] Email filters configured
-- [ ] Cron job added (hourly)
-- [ ] Tested with dry-run
+- [ ] Priority senders list created (optional)
+- [ ] Email monitoring cron job added (hourly)
+- [ ] Tested with manual wake event
+- [ ] Understand how to customize filters
 
 ---
 
 ### ✅ Step 20: Daily System Maintenance
 
-**What this is:** Automated daily maintenance tasks (backups, updates, cleanup, health checks)
+**What this is:** Automated daily maintenance checks using wake events
 
 **Why it matters:** Prevents system degradation, catches issues early, keeps everything running smoothly.
 
-**What it does (runs at 5:00 AM daily):**
+**What it checks (runs at 5:00 AM daily):**
 
-1. **OS updates** - Check for security updates, install if available
-2. **Disk cleanup** - Remove old logs, temp files, Docker images
-3. **Backup verification** - Ensure yesterday's backup exists in Google Drive
-4. **Security audit** - Check for unauthorized access, failed login attempts
-5. **Cron job health** - Verify all cron jobs ran successfully
-6. **Gateway health** - Check gateway logs for errors or warnings
-7. **Memory usage** - Alert if memory >80%
-8. **Disk space** - Alert if disk >85%
+1. **OS updates** - `apt list --upgradable` (security patches available?)
+2. **Disk cleanup** - `du -sh ~/clawd/logs`, old log files, temp files
+3. **Backup verification** - `rclone ls nova-gdrive:Nova-Backup/` (yesterday's backup exists?)
+4. **Security audit** - `journalctl | grep -i 'fail\|error\|unauthorized'`
+5. **Cron job health** - All cron jobs ran successfully?
+6. **Gateway health** - Check `~/clawd/logs/gateway-watchdog.log` for issues
+7. **Memory usage** - `free -h` (alert if >80%)
+8. **Disk space** - `df -h` (alert if >85%)
+
+**No script needed - bot runs checks directly via wake prompt**
 
 **Implementation:**
 
 ```bash
-# Download maintenance script
-curl -o ~/clawd/scripts/daily-maintenance.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/daily-maintenance.sh
+# Create maintenance checklist for bot to follow
+cat > ~/clawd/MAINTENANCE.md << 'EOF'
+# Daily Maintenance Checklist
 
-chmod +x ~/clawd/scripts/daily-maintenance.sh
+Run these checks and report summary:
 
-# Test maintenance script (dry-run)
-~/clawd/scripts/daily-maintenance.sh --dry-run
+## System Health
+- [ ] Check memory: `free -h` (alert if >80%)
+- [ ] Check disk: `df -h /` (alert if >85%)
+- [ ] Check updates: `apt list --upgradable 2>/dev/null | wc -l`
+
+## Backups
+- [ ] Verify Google Drive backup: `rclone ls nova-gdrive:Nova-Backup/ | grep $(date -d yesterday +%Y-%m-%d)`
+
+## Security
+- [ ] Check failed logins: `journalctl --since yesterday | grep -i 'failed password' | wc -l`
+- [ ] Check auth errors: `journalctl --since yesterday -p err | wc -l`
+
+## Cron Jobs
+- [ ] OAuth refresh: `tail -1 ~/clawd/logs/token-refresh.log`
+- [ ] Backup: `tail -1 ~/clawd/logs/gdrive-backup.log`
+- [ ] Watchdog: `tail -1 ~/clawd/logs/gateway-watchdog.log`
+- [ ] Heartbeat: `tail -1 ~/clawd/logs/heartbeat.log`
+
+## Cleanup (if disk >80%)
+- [ ] Old logs: `find ~/clawd/logs -name "*.log" -mtime +30 -delete`
+- [ ] Temp files: `rm -rf /tmp/*`
+
+**Format:** Brief summary with ✓/⚠/❌ for each category. Only mention details if issues found.
+EOF
 
 # Add to cron (5:00 AM daily)
-(crontab -l 2>/dev/null; echo "0 5 * * * ~/clawd/scripts/daily-maintenance.sh >> ~/clawd/logs/maintenance.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "0 5 * * * curl -X POST http://localhost:18789/api/cron/wake -H 'Content-Type: application/json' -d '{\"text\":\"Read ~/clawd/MAINTENANCE.md and run daily system checks. Report summary with status for each category. Alert me via Telegram if any issues found. Log to ~/clawd/logs/maintenance.log.\"}' >> ~/clawd/logs/maintenance.log 2>&1") | crontab -
 ```
 
-**What you'll see:**
-
-- **Daily summary** - Bot messages you each morning with maintenance report
-- **Only alerts on issues** - If everything is healthy, just a brief "✓ All systems OK"
-- **Actionable warnings** - If something needs attention, bot explains what and why
-
-**Example daily report:**
+**What you'll see each morning:**
 
 ```
 🔧 Daily Maintenance (2026-02-28)
 
-✓ OS updates: None available
-✓ Disk cleanup: Freed 2.3 GB
-✓ Backup: Verified in Google Drive
-✓ Security: No issues
-✓ Cron jobs: All 6 jobs ran successfully
-✓ Gateway: Healthy (no errors)
-⚠ Memory: 78% (within limits)
-✓ Disk: 45% used
+✓ System: Memory 45%, Disk 52%
+✓ Backups: Yesterday's backup verified in Drive
+✓ Security: 0 failed logins, 0 auth errors
+✓ Cron: All 4 jobs ran successfully
+✓ Cleanup: Not needed (disk <80%)
 
 Status: All systems OK
+```
+
+Or if issues detected:
+
+```
+🔧 Daily Maintenance (2026-02-28)
+
+⚠ System: Memory 84% (high!)
+✓ Backups: Verified
+❌ Security: 12 failed login attempts (suspicious?)
+⚠ Cron: Token refresh log shows 1 error
+✓ Cleanup: Freed 1.2GB old logs
+
+Action needed: Check security logs, investigate token refresh error
 ```
 
 **Verify:**
 
 ```bash
-# Check maintenance script exists
-ls -l ~/clawd/scripts/daily-maintenance.sh
-
-# Run dry-run to see what it checks
-~/clawd/scripts/daily-maintenance.sh --dry-run
+# Check maintenance checklist exists
+ls -l ~/clawd/MAINTENANCE.md
 
 # Check cron job scheduled
-crontab -l | grep daily-maintenance
+crontab -l | grep MAINTENANCE
 
-# Review sample maintenance log
+# Test manually (trigger now)
+curl -X POST http://localhost:18789/api/cron/wake -H 'Content-Type: application/json' -d '{"text":"Read ~/clawd/MAINTENANCE.md and run daily system checks. Report summary."}'
+
+# Check maintenance log
 tail ~/clawd/logs/maintenance.log
 ```
 
-- [ ] Daily maintenance script installed
-- [ ] Tested with dry-run
+- [ ] MAINTENANCE.md checklist created
 - [ ] Cron job scheduled (5 AM daily)
+- [ ] Tested with manual wake event
 - [ ] Understand what gets checked
 
 ---
 
 ### ✅ Step 21: Self-Improvement System
 
-**What this is:** Bot learns from mistakes and improves its own behavior over time
+**What this is:** Bot learns from mistakes and improves its own behavior over time using the self-improvement skill
 
 **Why it matters:** Your bot gets smarter the longer you use it. Errors become lessons. Corrections become permanent improvements.
 
 **How it works:**
 
-1. **Error capture** - When commands fail or produce unexpected results
-2. **User corrections** - When you say "No, that's wrong..." or "Actually..."
-3. **External failures** - API errors, timeouts, rate limits
-4. **Learning synthesis** - Once per week, bot reviews all learnings and updates its knowledge
-5. **Skill updates** - Bot can modify its own operating instructions based on lessons learned
+1. **Continuous capture** - Bot logs errors and corrections as they happen to `memory/` directory
+2. **Weekly synthesis** - Sunday 2 AM, bot reviews all learnings from the week
+3. **Pattern extraction** - Identifies recurring issues, common mistakes
+4. **Update MEMORY.md** - Promotes important lessons to long-term memory
+5. **Skill updates** - Can modify AGENTS.md, TOOLS.md based on learnings
 
 **What triggers learning:**
 
@@ -1466,63 +1545,103 @@ tail ~/clawd/logs/maintenance.log
 **Implementation:**
 
 ```bash
-# Download self-improvement script
-curl -o ~/clawd/scripts/self-improve.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/self-improve.sh
-
-chmod +x ~/clawd/scripts/self-improve.sh
-
-# Create learnings directory
+# Create memory/learnings directory structure
 mkdir -p ~/clawd/memory/learnings
 
+# Download self-improvement skill (provides logging templates)
+mkdir -p ~/clawd/skills/self-improving-agent
+curl -o ~/clawd/skills/self-improving-agent/SKILL.md \
+  https://raw.githubusercontent.com/victor-brechbill/nova-kernel/main/skills/self-improving-agent/SKILL.md
+
 # Add to cron (Sunday at 2:00 AM)
-(crontab -l 2>/dev/null; echo "0 2 * * 0 ~/clawd/scripts/self-improve.sh >> ~/clawd/logs/self-improvement.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "0 2 * * 0 curl -X POST http://localhost:18789/api/cron/wake -H 'Content-Type: application/json' -d '{\"text\":\"Weekly self-improvement review: Read the self-improving-agent skill. Review all files in ~/clawd/memory/ from the past week. Extract patterns and lessons learned. Update MEMORY.md with important learnings. Report summary of what you learned and what was updated. Log to ~/clawd/logs/self-improvement.log.\"}' >> ~/clawd/logs/self-improvement.log 2>&1") | crontab -
 ```
 
 **What the bot does weekly:**
 
-1. **Review error logs** from past week
-2. **Extract patterns** - Similar failures, recurring issues
-3. **Update MEMORY.md** - Add lessons learned
-4. **Update skills** - Modify AGENTS.md, TOOLS.md if workflows improved
-5. **Create reminders** - Schedule follow-ups for unresolved issues
+1. **Review memory files** - All daily logs from past week (`memory/2026-*.md`)
+2. **Extract patterns** - Similar failures? Recurring issues? Common corrections?
+3. **Categorize learnings:**
+   - Critical (broke something)
+   - High (caused confusion or wasted time)
+   - Medium (nice to know)
+   - Low (minor optimization)
+4. **Update MEMORY.md** - Add important lessons to long-term memory
+5. **Update skills** - If workflow improved, update AGENTS.md or TOOLS.md
+6. **Report summary** - Telegram message with what was learned
 
-**Example learning entry:**
+**How to log learnings in real-time:**
 
-```markdown
-## 2026-02-28 - OAuth Token Sync Failure
+When something fails or you correct the bot:
 
-**What happened:** sync-oauth-tokens.sh wrote `type: "oauth"` but needed `type: "claudeAiOauth"`
+```bash
+# Bot automatically logs to daily memory file
+# Example: memory/2026-02-28.md gets:
 
-**Impact:** Fresh installations failed with "No API key found"
+## 2026-02-28 15:30 - OAuth Token Type Error
 
-**Fix:** PR #42 changed sync script to use correct type
+**What happened:** Used `type: "oauth"` but needed `type: "claudeAiOauth"`
+
+**Impact:** Authentication failed with "No API key found"
+
+**Fix:** Changed sync-oauth-tokens.sh to use correct type
 
 **Lesson:** Always verify token type matches Claude Code's credential format
 
-**Prevention:** Added type validation check to sync script
+**Prevention:** Added type validation to sync script
+```
+
+Weekly review promotes this to MEMORY.md if important.
+
+**Example weekly summary:**
+
+```
+🧠 Weekly Self-Improvement (2026-03-02)
+
+Reviewed 7 days of memory files (2026-02-24 to 2026-03-01)
+
+Learnings captured:
+- 3 command failures (all resolved)
+- 2 user corrections (updated TOOLS.md)
+- 1 workflow improvement (updated AGENTS.md)
+
+Critical lessons promoted to MEMORY.md:
+1. OAuth token type must match Claude Code format
+2. Always verify CI passes before merging PRs
+3. Use `git add --all` to avoid missing untracked files
+
+Updates made:
+- MEMORY.md: Added 3 new lessons
+- TOOLS.md: Updated GitHub workflow section
+- AGENTS.md: Added pre-commit verification step
+
+Status: 3 critical lessons, 0 unresolved issues
 ```
 
 **Verify:**
 
 ```bash
-# Check self-improvement script exists
-ls -l ~/clawd/scripts/self-improve.sh
+# Check self-improvement skill downloaded
+ls -l ~/clawd/skills/self-improving-agent/SKILL.md
 
-# Test learning capture
-echo "Test learning: Always verify before deploying" > ~/clawd/memory/learnings/$(date +%Y-%m-%d)-test.md
+# Check memory/learnings directory exists
+ls -ld ~/clawd/memory/learnings
 
 # Check cron job scheduled
-crontab -l | grep self-improve
+crontab -l | grep "self-improvement"
 
-# Review learnings directory
-ls ~/clawd/memory/learnings/
+# Test manual review
+curl -X POST http://localhost:18789/api/cron/wake -H 'Content-Type: application/json' -d '{"text":"Review memory files from past week and summarize learnings."}'
+
+# Check self-improvement log
+tail ~/clawd/logs/self-improvement.log
 ```
 
-- [ ] Self-improvement script installed
-- [ ] Learnings directory created
-- [ ] Cron job scheduled (weekly)
-- [ ] Understand how bot learns from errors
+- [ ] Self-improving-agent skill downloaded
+- [ ] memory/learnings directory created
+- [ ] Cron job scheduled (Sunday 2 AM)
+- [ ] Tested manual review
+- [ ] Understand how learnings are captured and reviewed
 
 ---
 
