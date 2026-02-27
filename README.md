@@ -87,7 +87,7 @@ node -v
 2. **Install Claude Code on your EC2 server:**
 
    ```bash
-   curl -fsSL https://install.claudeusercontent.com/latest/unix | sh
+   curl -fsSL https://claude.ai/install.sh | bash
    ```
 
    ```bash
