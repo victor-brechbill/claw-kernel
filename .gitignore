@@ -49,8 +49,9 @@ apps/ios/*.xcfilelist
 
 # Vendor build artifacts
 vendor/a2ui/renderers/lit/dist/
-src/canvas-host/a2ui/*.bundle.js
 src/canvas-host/a2ui/*.map
+# Keep a2ui.bundle.js for distribution installs (allow prebuilt bundle)
+# src/canvas-host/a2ui/*.bundle.js
 .bundle.hash
 
 # fastlane (iOS)
