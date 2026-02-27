@@ -60,13 +60,15 @@ npm update -g @claw/claw-kernel
 
 **Why this is critical:** Claude Code's OAuth token expires after ~24 hours. Without automatic refresh, your agent stops working silently.
 
-**Install scripts:**
+**Note:** Tokens are automatically synced to OpenClaw during `openclaw onboard`. This cron job keeps them refreshed after expiry.
+
+**Install refresh scripts:**
 
 ```bash
-# Copy scripts from claw-kernel
+# Copy scripts from claw-kernel repo
 mkdir -p ~/scripts ~/logs
-cp /path/to/claw-kernel/scripts/refresh-claude-token.sh ~/scripts/
-cp /path/to/claw-kernel/scripts/sync-oauth-tokens.sh ~/scripts/
+cp ~/claw-kernel/scripts/refresh-claude-token.sh ~/scripts/
+cp ~/claw-kernel/scripts/sync-oauth-tokens.sh ~/scripts/
 chmod +x ~/scripts/refresh-claude-token.sh ~/scripts/sync-oauth-tokens.sh
 ```
 
@@ -75,24 +77,29 @@ chmod +x ~/scripts/refresh-claude-token.sh ~/scripts/sync-oauth-tokens.sh
 ```bash
 crontab -e
 
-# Add this line:
+# Add this line (replace YOUR-USERNAME with your actual username):
 0 */6 * * * /home/YOUR-USERNAME/scripts/refresh-claude-token.sh >> /home/YOUR-USERNAME/logs/token-refresh.log 2>&1
 ```
+
+**How it works:**
+
+- `refresh-claude-token.sh` refreshes the OAuth token in `~/.claude/.credentials.json`
+- Then automatically calls `sync-oauth-tokens.sh` to sync tokens to all OpenClaw agent directories
 
 **Verification:**
 
 ```bash
-# Test manual refresh
-~/scripts/refresh-claude-token.sh
-
 # Check token expiry
 python3 -c "import json, datetime; c=json.load(open('$HOME/.claude/.credentials.json')); print('Expires:', datetime.datetime.fromtimestamp(c['claudeAiOauth']['expiresAt']/1000))"
 
-# Verify cron entry
+# Verify cron entry exists
 crontab -l | grep refresh-claude-token
+
+# Check recent refresh logs
+tail -20 ~/logs/token-refresh.log
 ```
 
-**Without this, your agent will stop responding after ~24 hours when the OAuth token expires.**
+**Without this cron job, your agent will stop responding after ~24 hours when the OAuth token expires.**
 
 ---
 
