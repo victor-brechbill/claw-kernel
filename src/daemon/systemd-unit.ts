@@ -46,6 +46,10 @@ export function buildSystemdUnit({
     "Wants=network-online.target",
     "",
     "[Service]",
+    // Clean up any stuck onboard or stray processes before starting gateway
+    // (common issue: openclaw-onboard sometimes doesn't exit cleanly)
+    "ExecStartPre=/bin/sh -c 'pkill -f \"openclaw-onboard\" || true'",
+    "ExecStartPre=/bin/sh -c 'pkill -f \"openclaw$\" || true'",
     `ExecStart=${execStart}`,
     "Restart=always",
     "RestartSec=5",
