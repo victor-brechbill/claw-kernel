@@ -29,14 +29,11 @@ Claw Kernel removes 27 unused extensions from upstream OpenClaw and keeps a focu
 ### Install
 
 ```bash
-# 1. Configure npm to use user directory (avoids permission issues)
-npm config set prefix ~/.npm-global
-
-# 2. Run the install script
+# 1. Run the install script
 curl -fsSL https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/install-claw-kernel.sh | bash
 
-# 3. Reload your shell (if openclaw command not found)
-hash -r
+# 2. Reload your shell config
+source ~/.bashrc  # (or ~/.zshrc if using zsh)
 ```
 
 Or install manually:
@@ -51,8 +48,8 @@ cd ~/claw-kernel
 pnpm install && pnpm build
 npm install -g .
 
-# 3. Reload command cache
-hash -r
+# 3. Reload your shell config
+source ~/.bashrc  # (or ~/.zshrc if using zsh)
 ```
 
 ### Set up
