@@ -68,6 +68,80 @@ _Onboarding complete! Now let's build out your production environment together._
 
 ## Setup Steps
 
+### ✅ Step 0: Telegram Configuration
+
+**What this is:** Properly configure Telegram privacy, chat settings, and behavior
+
+**Why it matters:** Default settings might not be optimal - you want the bot private, responsive, and configured for your workflow.
+
+**What we'll configure:**
+
+1. **Privacy - Ensure bot is private (only you can message it)**
+2. **Chat settings - Interrupt mode, reasoning, streaming**
+3. **DM policy - Allowlist with only your Telegram ID**
+4. **Reactions - Set to minimal or off**
+
+**Check current config:**
+
+```bash
+# View current Telegram settings
+cat ~/.openclaw/openclaw.json | jq '.channels.telegram'
+```
+
+**Recommended settings:**
+
+```json
+{
+  "telegram": {
+    "enabled": true,
+    "dmPolicy": "allowlist",
+    "allowFrom": [YOUR_TELEGRAM_USER_ID],
+    "groupPolicy": "allowlist",
+    "streamMode": "block",
+    "reactions": {
+      "mode": "minimal"
+    }
+  }
+}
+```
+
+**What each setting means:**
+
+- **`dmPolicy: "allowlist"`** - Only people in `allowFrom` can DM the bot (private)
+- **`allowFrom: [YOUR_ID]`** - Your Telegram user ID (the bot will tell you this)
+- **`groupPolicy: "allowlist"`** - Bot won't join groups unless explicitly allowed
+- **`streamMode: "block"`** - Waits until full response ready before sending (cleaner UX)
+- **`reactions.mode: "minimal"`** - Bot reacts sparingly (not every message)
+
+**Implementation:**
+
+I can help you update these settings. First, let me check your current config and tell you:
+
+1. Your Telegram user ID
+2. What settings need changing
+3. Recommend optimal settings for your use case
+
+Then I'll either:
+
+- Update the config for you (with permission), or
+- Guide you through manual edits
+
+**Verify:**
+
+```bash
+# Check bot is private
+cat ~/.openclaw/openclaw.json | jq '.channels.telegram.dmPolicy'  # Should be "allowlist"
+cat ~/.openclaw/openclaw.json | jq '.channels.telegram.allowFrom'  # Should contain only your ID
+
+# Test by sending a message from another Telegram account - should be ignored
+```
+
+- [ ] Telegram privacy configured (allowlist, only your user ID)
+- [ ] Chat settings optimized (stream mode, reactions, reasoning)
+- [ ] Verified bot ignores messages from other users
+
+---
+
 ### ✅ Step 1: OAuth Token Refresh
 
 **What this is:** Automatic refresh of Claude Code OAuth tokens every 6 hours
