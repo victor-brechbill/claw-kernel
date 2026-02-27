@@ -48,7 +48,7 @@ fi
 
 echo ""
 echo "🔨 Building $KERNEL_NAME..."
-pnpm install --frozen-lockfile
+pnpm install --no-frozen-lockfile
 pnpm build
 
 echo ""
