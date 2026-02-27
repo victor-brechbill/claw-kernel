@@ -298,6 +298,144 @@ grep "new-model-name" src/models/library.ts
 **Custom patches:**
 If you modify kernel source directly, document your patches in `~/patches/` so you can re-apply after updates.
 
+---
+
+## 📂 Coding Workspace Structure
+
+If you use a kanban-driven coding workflow, set up these subdirectories:
+
+```
+~/YOUR-WORKSPACE/
+├── coding/                       # Coding workflow artifacts
+│   ├── active-tasks.json         # Agent task registry (see below)
+│   ├── prds/                     # PRD documents (TICKET-{id}-prd.md)
+│   └── status/                   # Agent status files
+│       ├── TICKET-{id}-dev.md    # Developer agent status
+│       ├── TICKET-{id}-live.txt  # Live one-liner (for dashboard)
+│       └── TICKET-{id}-review.md # Code review status
+└── ...
+```
+
+### Active Tasks Registry
+
+Track what agents are working on in `coding/active-tasks.json`:
+
+```json
+{
+  "tasks": {
+    "TICKET-123": {
+      "title": "Add user authentication",
+      "project": "my-project",
+      "developer": {
+        "status": "running",
+        "session": "dev-session-id",
+        "branch": "feat/TICKET-123-user-auth"
+      },
+      "reviewer": {
+        "status": "none"
+      },
+      "definitionOfDone": {
+        "readyToMerge": false
+      }
+    }
+  }
+}
+```
+
+Check task states quickly:
+
+```bash
+jq -r '.tasks | to_entries[] | "\(.key): dev=\(.value.developer.status // "none"), review=\(.value.reviewer.status // "none"), ready=\(.value.definitionOfDone.readyToMerge)"' ~/YOUR-WORKSPACE/coding/active-tasks.json
+```
+
+---
+
+## 🚨 Agent Concurrency Rules (Per Project)
+
+- **Max 1 Developer agent per project** at a time
+- **Max 1 Reviewer agent per project** at a time
+- **Developer + Reviewer CAN run concurrently** on the same project (different branches)
+- Check `sessions_list` before spawning — if a developer is already running on that project, wait
+- Agents on **different projects** can always run concurrently
+
+---
+
+## 📋 Card Lifecycle
+
+```
+backlog (needs PRD) → backlog (has PRD, awaiting approval) →
+backlog (approved) → in_progress → review → done
+                                     ↓
+                             (if failed) → new card for fixes
+```
+
+### 🔗 ALWAYS Link Your Work!
+
+When moving a card to `done`, **ALWAYS include a clickable URL** in the comment:
+
+- **PR merged:** `✅ Completed! PR: https://github.com/{owner}/{repo}/pull/{number}`
+- **Direct commit:** `✅ Completed! Commit: https://github.com/{owner}/{repo}/commit/{sha}`
+
+Your human needs to see exactly what changed. Never mark done without a link!
+
+---
+
+## 🔄 Git Lifecycle
+
+For each coding task:
+
+1. **Branch** — Create from main: `feat/TICKET-{id}-short-description`
+2. **Commit** — Small, atomic commits with clear messages
+3. **PR** — Open pull request, link to kanban card
+4. **Review** — Spawn code reviewer agent, address feedback
+5. **Merge** — Squash merge after approval, delete branch
+6. **Cleanup** — Remove status files after merge (see below)
+
+### Process Cleanup
+
+After a PR is merged and the card moves to `done`:
+
+- Delete the status files: `coding/status/TICKET-{id}-dev.md`, `TICKET-{id}-live.txt`, `TICKET-{id}-review.md`
+- Remove the task entry from `coding/active-tasks.json`
+- Archive the PRD if no longer needed: move to `coding/prds/archive/`
+
+---
+
+## ⏱️ Time Estimation — LLM Agent Time
+
+These are estimates for **LLM agent execution time**, not human time:
+
+| Category | Time      | Examples                            |
+| -------- | --------- | ----------------------------------- |
+| Trivial  | <2 min    | CSS tweak, config change, typo fix  |
+| Small    | 2-10 min  | Single file change, simple endpoint |
+| Medium   | 10-20 min | Multi-file change, new component    |
+| Large    | 20-45 min | Major feature, architecture change  |
+
+**If your estimate exceeds 30 min, reconsider.** Only valid reasons: slow test suites, external API dependencies, multi-repo coordination.
+
+---
+
+## 🧹 Daily System Maintenance
+
+Set up a cron job (see `docs/examples/cron-jobs.md`) for recurring housekeeping:
+
+- OS updates and cleanup
+- Storage and memory checks
+- Security audits
+- Cron job health verification
+- Token refresh validation
+
+**Periodically verify:**
+
+1. The maintenance job itself is running (check `cron(action="list")`)
+2. Recent maintenance reports don't flag any issues
+3. Add new maintenance tasks when needed
+
+If you need a recurring "keep things tidy" task, update the maintenance cron job rather than creating a new one.
+
+---
+
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
