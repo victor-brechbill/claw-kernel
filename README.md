@@ -26,6 +26,86 @@ Claw Kernel removes 27 unused extensions from upstream OpenClaw and keeps a focu
 
 ## Quick Start
 
+### Prerequisites
+
+Before installing, you'll need:
+
+#### 1. Server Setup (AWS EC2 Recommended)
+
+**Recommended EC2 settings:**
+
+- **Instance type:** t3.medium or larger (2 vCPU, 4GB RAM minimum)
+- **Storage:** 50GB+ GP3 SSD
+- **OS:** Ubuntu 22.04 LTS (or 24.04 LTS)
+- **Security Group:** Allow inbound SSH (port 22) from your IP
+
+**Launch instance:**
+
+```bash
+# Via AWS Console:
+# 1. EC2 → Launch Instance
+# 2. Choose Ubuntu Server 22.04 LTS
+# 3. Select t3.medium (or larger for production)
+# 4. Configure 50GB+ storage
+# 5. Create/select key pair for SSH access
+# 6. Launch and note the public IP
+
+# Connect via SSH:
+ssh -i your-key.pem ubuntu@YOUR_EC2_IP
+```
+
+**Install Node.js 22+ on the server:**
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node -v  # Verify v22.x.x
+```
+
+#### 2. Anthropic Account (Claude API Access)
+
+**Requirements:**
+
+- Anthropic account with **OAuth-enabled subscription**
+- **Pro Max ($200/month)** or **Pro ($20/month + $100 monthly spend)** plan
+- API-only accounts do NOT work (must have web access for OAuth)
+
+**Setup:**
+
+1. Go to [claude.ai](https://claude.ai) and sign up
+2. Subscribe to Pro Max ($200/mo) or Pro plan
+3. You'll use OAuth during `openclaw onboard` (no API key needed)
+
+**Note:** API keys are supported but NOT recommended (expensive, ~$100/day). OAuth uses your Pro subscription and is much more cost-effective.
+
+#### 3. Telegram Bot
+
+**Create a bot with BotFather:**
+
+1. Open Telegram and search for `@BotFather`
+2. Send `/newbot`
+3. Follow prompts to choose a name and username
+4. BotFather will give you a **bot token** (save this!)
+5. Get your Telegram user ID:
+   - Search for `@userinfobot` in Telegram
+   - Send `/start`
+   - Note your user ID (e.g., `123456789`)
+
+**Example:**
+
+```
+You: /newbot
+BotFather: Alright, a new bot. How are we going to call it?
+You: My Assistant
+BotFather: Good. Now let's choose a username for your bot.
+You: my_assistant_bot
+BotFather: Done! Your token is: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+```
+
+Save the token and your user ID - you'll need both during onboarding.
+
+---
+
 ### Install
 
 ```bash
@@ -73,7 +153,7 @@ openclaw gateway status
 openclaw doctor
 ```
 
-**Requirements:** Node.js 22+, Git. See the [Installation Guide](docs/distribution/installation.md) for full details.
+**See [Prerequisites](#prerequisites) above for server, Anthropic account, and Telegram bot setup. Full details: [Installation Guide](docs/distribution/installation.md)**
 
 ## Configuration
 
