@@ -19,7 +19,10 @@ _Onboarding complete! Now let's build out your production environment together._
 
 1. **Greet the user warmly** - they just completed onboard!
 2. **Summarize what this setup wizard will do:**
+   - Telegram configuration (privacy, chat settings)
    - OAuth token refresh (prevents 24h agent death)
+   - Heartbeat (proactive check-ins)
+   - Timezone (correct timestamps)
    - Automated backups (protects your data)
    - Security hardening (SSH, firewall, updates)
    - Monitoring & health checks
@@ -181,7 +184,113 @@ cat ~/.claude/.credentials.json | jq '.claudeAiOauth.expiresAt'
 
 ---
 
-### ✅ Step 2: Automated Backups
+### ✅ Step 2: Heartbeat Configuration
+
+**What this is:** Periodic automated check-ins where the bot proactively looks for work
+
+**Why it matters:** Without heartbeat, the bot only responds when you message it. With heartbeat, it can check the kanban board, handle background tasks, and be proactive.
+
+**What we'll configure:**
+
+1. **Heartbeat frequency** - How often to check in (recommended: every 1 hour for OAuth users)
+2. **Heartbeat target** - Where to send check-in messages (usually "none" = silent, or specific channel)
+3. **What the bot checks** - Kanban board, email, calendar, agent status
+
+**Check current config:**
+
+```bash
+# View heartbeat settings
+cat ~/.openclaw/openclaw.json | jq '.agents.defaults.heartbeat'
+```
+
+**Recommended settings:**
+
+```json
+{
+  "heartbeat": {
+    "every": "1h",
+    "target": "none"
+  }
+}
+```
+
+**What this means:**
+
+- **`every: "1h"`** - Check in every hour (OAuth users can afford frequent checks)
+- **`target: "none"`** - Silent check-ins (only messages you if something needs attention)
+- Alternative: `target: "telegram"` sends "HEARTBEAT_OK" confirmations
+
+**Implementation:**
+
+I can update your heartbeat config. The bot will then:
+
+1. Check the kanban board for work
+2. Look for completed agents
+3. Check for unmerged PRs
+4. Only message you if something needs action
+
+**Verify:**
+
+```bash
+# Check heartbeat config
+cat ~/.openclaw/openclaw.json | jq '.agents.defaults.heartbeat'
+
+# Wait 1 hour and verify heartbeat ran (check logs)
+journalctl --user -u openclaw-gateway.service | grep heartbeat
+```
+
+- [ ] Heartbeat configured (1h interval, silent mode)
+- [ ] Verified heartbeat runs and checks kanban board
+
+---
+
+### ✅ Step 3: Timezone Configuration
+
+**What this is:** Set your local timezone so timestamps make sense
+
+**Why it matters:** Logs, memory files, and cron jobs all use timestamps. Without timezone config, everything is in UTC.
+
+**Check current timezone:**
+
+```bash
+# System timezone
+timedatectl
+
+# Agent timezone (if configured)
+cat ~/.openclaw/openclaw.json | jq '.timezone'
+```
+
+**Set timezone:**
+
+```bash
+# Set system timezone
+sudo timedatectl set-timezone America/New_York  # Replace with your timezone
+
+# Verify
+timedatectl
+```
+
+**Common timezones:**
+
+- `America/New_York` (Eastern)
+- `America/Chicago` (Central)
+- `America/Denver` (Mountain)
+- `America/Los_Angeles` (Pacific)
+- `Europe/London`
+- Full list: `timedatectl list-timezones`
+
+**Verify:**
+
+```bash
+# Check system timezone matches your location
+date
+```
+
+- [ ] Timezone configured and verified
+
+---
+
+### ✅ Step 4: Automated Backups
 
 **What this is:** Daily backups of your workspace, config, and databases to Google Drive
 
@@ -240,7 +349,7 @@ crontab -l | grep backup-to-gdrive
 
 ---
 
-### ✅ Step 3: Security Hardening
+### ✅ Step 5: Security Hardening
 
 **What this is:** SSH hardening, firewall, automatic updates, fail2ban
 
@@ -283,7 +392,7 @@ grep "PasswordAuthentication no" /etc/ssh/sshd_config
 
 ---
 
-### ✅ Step 4: Gateway Health Monitoring
+### ✅ Step 6: Gateway Health Monitoring
 
 **What this is:** Watchdog script that detects gateway deadlocks and auto-restarts
 
@@ -316,7 +425,7 @@ crontab -l | grep healthcheck-gateway
 
 ---
 
-### ✅ Step 5: Pre-commit Hooks (Optional)
+### ✅ Step 7: Pre-commit Hooks (Optional)
 
 **What this is:** Git hooks that prevent committing secrets (gitleaks), run linters, format code
 
@@ -354,7 +463,7 @@ pre-commit run --all-files
 
 ---
 
-### ✅ Step 6: Dashboard Setup (Optional)
+### ✅ Step 8: Dashboard Setup (Optional)
 
 **What this is:** Web dashboard for kanban board, system monitoring, Tommy/Stocks pages
 
@@ -395,7 +504,7 @@ curl http://localhost:3080/api/cards
 
 ---
 
-### ✅ Step 7: System Maintenance Cron
+### ✅ Step 9: System Maintenance Cron
 
 **What this is:** Daily maintenance job (OS updates, cleanup, health checks)
 
@@ -433,7 +542,7 @@ This is typically set up via OpenClaw's built-in cron system rather than system 
 
 ---
 
-### ✅ Step 8: Memory System
+### ✅ Step 10: Memory System
 
 **What this is:** Daily memory logs + long-term curated MEMORY.md
 
@@ -467,7 +576,7 @@ ls ~/clawd/memory/
 
 ---
 
-### ✅ Step 9: Documentation Review
+### ✅ Step 11: Documentation Review
 
 **What this is:** Quick review of key docs to know where to find help
 
