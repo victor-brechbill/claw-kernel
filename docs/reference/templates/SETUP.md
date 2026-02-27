@@ -300,17 +300,17 @@ ls ~/clawd/memory/
 
 ---
 
-### ✅ Step 4: Tools & Integrations
+### ✅ Step 4: Enable Agent-to-Agent Communication
 
-**What this is:** Enable web search and agent-to-agent communication
+**What this is:** Enable sub-agent orchestration (spawning developer, code-reviewer, and other sub-agents)
 
-**Why it matters:** Web search lets the agent look things up. Agent-to-agent enables sub-agent orchestration.
+**Why it matters:** This allows your main agent to spawn specialized sub-agents for tasks like coding and code review. Without this, sub-agent spawning won't work.
 
 **Check current config:**
 
 ```bash
 # View tools config
-cat ~/.openclaw/openclaw.json | jq '.tools'
+cat ~/.openclaw/openclaw.json | jq '.tools.agentToAgent'
 ```
 
 **Recommended settings:**
@@ -318,12 +318,6 @@ cat ~/.openclaw/openclaw.json | jq '.tools'
 ```json
 {
   "tools": {
-    "web": {
-      "search": {
-        "provider": "brave",
-        "apiKey": "YOUR_BRAVE_API_KEY"
-      }
-    },
     "agentToAgent": {
       "enabled": true
     }
@@ -331,33 +325,19 @@ cat ~/.openclaw/openclaw.json | jq '.tools'
 }
 ```
 
-**What each tool does:**
-
-- **`web.search`** - Brave Search API for web lookups (optional, requires API key)
-- **`agentToAgent`** - Enables sub-agent spawning (developer, reviewer, etc.)
-
 **Implementation:**
 
-I'll enable agent-to-agent communication. Web search is optional - if you have a Brave API key, I can add it.
-
-**Get Brave API key (optional):**
-
-1. Go to https://brave.com/search/api/
-2. Sign up for free tier (2000 searches/month)
-3. Copy API key
+I'll enable agent-to-agent communication in your config.
 
 **Verify:**
 
 ```bash
 # Check agent-to-agent is enabled
 cat ~/.openclaw/openclaw.json | jq '.tools.agentToAgent.enabled'
-
-# If you added Brave API key:
-cat ~/.openclaw/openclaw.json | jq '.tools.web.search.provider'
+# Should return: true
 ```
 
 - [ ] Agent-to-agent communication enabled
-- [ ] Web search configured (optional - skip if no API key)
 
 ---
 
