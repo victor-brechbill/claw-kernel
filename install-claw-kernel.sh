@@ -27,6 +27,10 @@ fi
 
 echo "✅ Node.js v$(node -v) found"
 
+# Configure npm to use user directory (prevents permission errors)
+echo "📝 Configuring npm to use ~/.npm-global for global packages..."
+npm config set prefix ~/.npm-global
+
 # Check for pnpm
 if ! command -v pnpm &> /dev/null; then
     echo "📦 Installing pnpm..."
@@ -55,28 +59,48 @@ echo ""
 echo "📦 Installing globally..."
 npm install -g .
 
-# Get npm global bin directory
-NPM_BIN=$(npm bin -g 2>/dev/null || echo "$HOME/.npm-global/bin")
+# Configure PATH if needed
+NPM_BIN="$HOME/.npm-global/bin"
+export PATH="$NPM_BIN:$PATH"
+
+# Determine shell config file
+if [ -n "$ZSH_VERSION" ]; then
+    SHELL_CONFIG="$HOME/.zshrc"
+elif [ -n "$BASH_VERSION" ]; then
+    SHELL_CONFIG="$HOME/.bashrc"
+else
+    # Default to bashrc
+    SHELL_CONFIG="$HOME/.bashrc"
+fi
+
+# Add PATH to shell config if not already there
+if ! grep -q "\.npm-global/bin" "$SHELL_CONFIG" 2>/dev/null; then
+    echo ""
+    echo "📝 Adding npm global bin to PATH in $SHELL_CONFIG..."
+    echo "" >> "$SHELL_CONFIG"
+    echo "# Added by claw-kernel install script" >> "$SHELL_CONFIG"
+    echo "export PATH=\"\$HOME/.npm-global/bin:\$PATH\"" >> "$SHELL_CONFIG"
+    echo "✅ PATH updated in $SHELL_CONFIG"
+fi
+
+# Refresh command cache
+hash -r 2>/dev/null || true
 
 echo ""
 echo "✅ Claw Kernel installed successfully!"
 echo ""
 
-# Check if openclaw command is available
-if ! command -v openclaw &> /dev/null; then
-    echo "⚠️  The 'openclaw' command is not in your PATH"
-    echo ""
-    echo "Add this line to your ~/.bashrc or ~/.zshrc:"
-    echo "  export PATH=\"$NPM_BIN:\$PATH\""
-    echo ""
-    echo "Then reload your shell:"
-    echo "  source ~/.bashrc  # (or ~/.zshrc)"
-    echo ""
-    echo "Or run this command now:"
-    echo "  export PATH=\"$NPM_BIN:\$PATH\""
-    echo ""
+# Verify openclaw command is available
+if command -v openclaw &> /dev/null; then
+    echo "✅ openclaw command is ready to use"
+    echo "   Version: $(openclaw --version 2>/dev/null || echo 'unknown')"
+else
+    echo "⚠️  openclaw command not found in current shell"
+    echo "   Run: source $SHELL_CONFIG"
+    echo "   Or start a new terminal session"
 fi
 
+echo ""
 echo "Next steps:"
 echo "  1. Run: openclaw onboard"
 echo "  2. Configure your channels and API keys"
