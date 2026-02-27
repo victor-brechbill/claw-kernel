@@ -31,6 +31,10 @@ echo "✅ Node.js v$(node -v) found"
 echo "📝 Configuring npm to use ~/.npm-global for global packages..."
 npm config set prefix ~/.npm-global
 
+# Add npm global bin to PATH immediately (needed for pnpm below)
+NPM_BIN="$HOME/.npm-global/bin"
+export PATH="$NPM_BIN:$PATH"
+
 # Check for pnpm
 if ! command -v pnpm &> /dev/null; then
     echo "📦 Installing pnpm..."
@@ -58,10 +62,6 @@ pnpm build
 echo ""
 echo "📦 Installing globally..."
 npm install -g .
-
-# Configure PATH if needed
-NPM_BIN="$HOME/.npm-global/bin"
-export PATH="$NPM_BIN:$PATH"
 
 # Determine shell config file
 if [ -n "$ZSH_VERSION" ]; then
