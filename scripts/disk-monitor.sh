@@ -16,7 +16,8 @@ if [ "$DISK_USAGE" -ge 90 ]; then
   systemctl --user stop openclaw-gateway.service
   
   # Try to send alert (if possible - disk might be too full for HTTP request)
-  curl -X POST http://localhost:18789/api/message/send \
+  # Use OPENCLAW_GATEWAY_PORT env var if set, default to 18789
+  curl -X POST "http://localhost:${OPENCLAW_GATEWAY_PORT:-18789}/api/message/send" \
     -H 'Content-Type: application/json' \
     -d "{\"text\":\"🚨 EMERGENCY: Disk at ${DISK_USAGE}%. Gateway shut down to prevent system hang. Free space and run: systemctl --user start openclaw-gateway.service\"}" \
     2>/dev/null || true
