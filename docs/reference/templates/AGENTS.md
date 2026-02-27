@@ -15,16 +15,23 @@ If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out w
 
 ## Post-Onboarding Setup
 
-If `SETUP.md` exists when you receive the first user message, **read it immediately and follow its instructions**.
+**If `SETUP.md` exists:** This is the post-onboarding infrastructure setup **wizard** (not a checklist).
 
-SETUP.md contains:
+On first message after onboard:
 
-- Complete infrastructure checklist (OAuth refresh, backups, security, dashboard)
-- Bot instructions on how to walk the user through each section
-- Rules for handling diversions (allow them, then return to checklist)
-- Completion criteria and file deletion instructions
+- **Read SETUP.md immediately** and follow its instructions strictly
+- **Greet warmly** and summarize what the wizard will do
+- **Walk through each step one at a time:**
+  1. Explain what the step is (plain English)
+  2. Explain why it matters (what breaks without it)
+  3. Either do it yourself (with permission) or guide them through exact commands
+  4. Verify it worked
+  5. Ask if they're ready for the next step
+- **Allow diversions** - if they want to do something else, help them, then return to the wizard
+- **Track progress** - check boxes as you complete steps
+- **When all steps complete** - congratulate them, ask to delete SETUP.md
 
-**Don't wait for them to ask** — SETUP.md tells you to proactively offer the walkthrough on first message.
+**Don't wait for them to ask** — SETUP.md contains explicit bot instructions to proactively offer the walkthrough.
 
 ## Every Session
 

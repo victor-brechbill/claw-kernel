@@ -112,7 +112,54 @@ node -v
 
 **Note:** API keys are supported but NOT recommended (expensive, ~$100/day). OAuth uses your Pro subscription and is much more cost-effective.
 
-#### 3. Telegram Bot
+#### 3. Google Workspace Account (Recommended)
+
+**Why you need this:**
+
+- **Custom email** for your bot (e.g., `bot@yourdomain.com`)
+- **Google Drive** for automated backups (workspace, configs, databases)
+- **Shared workspace** for collaboration and file sharing
+- **Professional identity** for your AI assistant
+
+**Setup Google Workspace Business Starter:**
+
+1. **Sign up at [workspace.google.com](https://workspace.google.com)**
+   - Choose **Business Starter** plan ($6/user/month)
+   - You'll need a domain name (can use existing or buy new through Google)
+
+2. **Verify domain ownership:**
+   - Google will provide a TXT record
+   - Add it to your domain's DNS settings
+   - Wait 10-60 minutes for verification
+
+3. **Create bot user account:**
+   - In Google Admin console, create a new user
+   - Recommended email: `bot@yourdomain.com` or `assistant@yourdomain.com`
+   - Save the password securely (you'll use this for Drive backups)
+
+4. **Enable Google Drive API:**
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Create a new project (e.g., "Bot Workspace")
+   - Enable Google Drive API
+   - Create OAuth 2.0 credentials (Desktop app type)
+   - Download credentials JSON file
+
+5. **Create backup folder structure:**
+   - Sign in to Drive as your bot user
+   - Create folder: `Bot-Backups`
+   - Note the folder ID from the URL (needed for backup scripts)
+
+**What you'll use:**
+
+- Bot email for system notifications
+- Drive folder for automated daily backups
+- OAuth credentials for Drive API access
+
+**Cost:** $6/month (Business Starter, 1 user)
+
+**Alternative (free but limited):** Use a personal Gmail account, but you won't have custom email or professional workspace features.
+
+#### 4. Telegram Bot
 
 **Create a bot with BotFather:**
 
