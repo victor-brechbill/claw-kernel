@@ -53,7 +53,7 @@ export async function applyAuthChoiceAnthropic(
     nextConfig = applyAuthProfileConfig(nextConfig, {
       profileId: namedProfileId,
       provider,
-      mode: "token",
+      mode: "oauth",
     });
     return { config: nextConfig };
   }
