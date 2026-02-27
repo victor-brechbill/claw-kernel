@@ -518,59 +518,85 @@ cat ~/.claude/.credentials.json | jq '.claudeAiOauth.expiresAt'
 
 **What this is:** Periodic automated check-ins where the bot proactively looks for work
 
-**Why it matters:** Without heartbeat, the bot only responds when you message it. With heartbeat, it can check the kanban board, handle background tasks, and be proactive.
+**Why it matters:** Without heartbeat, the bot only responds when you message it. With heartbeat, it can check the kanban board, monitor agents, handle background tasks, and be proactive.
 
-**What we'll configure:**
+**Important:** OpenClaw has an internal heartbeat feature, but we don't use it. Instead, we use a **cron-based heartbeat** which is more flexible and easier to manage.
 
-1. **Heartbeat frequency** - How often to check in (recommended: every 1 hour for OAuth users)
-2. **Heartbeat target** - Where to send check-in messages (usually "none" = silent)
-3. **What the bot checks** - Kanban board, email, calendar, agent status
+**How it works:**
 
-**Check current config:**
+1. A cron job fires every 6 hours (or whatever frequency you choose)
+2. The cron job sends a wake event to your bot
+3. The bot reads `HEARTBEAT.md` in your workspace
+4. The bot works through the checklist (check kanban board, agent status, unmerged PRs, etc.)
+5. The bot only messages you if something needs attention (otherwise silent)
 
-```bash
-# View heartbeat settings
-cat ~/.openclaw/openclaw.json | jq '.agents.defaults.heartbeat'
-```
+**What the bot checks each heartbeat:**
 
-**Recommended settings:**
-
-```json
-{
-  "heartbeat": {
-    "every": "1h",
-    "target": "none"
-  }
-}
-```
-
-**What this means:**
-
-- **`every: "1h"`** - Check in every hour (OAuth users can afford frequent checks)
-- **`target: "none"`** - Silent check-ins (only messages you if something needs attention)
-- Alternative: `target: "telegram"` sends "HEARTBEAT_OK" confirmations
+- Kanban board for new work or completed tasks
+- Running developer/reviewer agents
+- Unmerged PRs across all repos
+- Victor comments needing responses
+- Cards stuck in review or in-progress
 
 **Implementation:**
 
-I can update your heartbeat config. The bot will then:
+```bash
+# Create a heartbeat cron job (every 6 hours)
+(crontab -l 2>/dev/null; echo "0 */6 * * * curl -X POST http://localhost:3100/api/cron/wake -H 'Content-Type: application/json' -d '{\"text\":\"Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.\"}' >> ~/clawd/logs/heartbeat.log 2>&1") | crontab -
+```
 
-1. Check the kanban board for work
-2. Look for completed agents
-3. Check for unmerged PRs
-4. Only message you if something needs action
+**What this does:**
+
+- Runs every 6 hours at :00 (midnight, 6am, noon, 6pm)
+- Sends a wake event to the gateway with heartbeat instructions
+- Bot reads `HEARTBEAT.md` and follows the checklist
+- Logs to `~/clawd/logs/heartbeat.log`
+
+**Adjusting heartbeat frequency:**
+
+You can change the frequency anytime by editing the cron job:
+
+```bash
+# Edit cron jobs
+crontab -e
+
+# Find the line with "heartbeat.log"
+# Change "0 */6 * * *" to your preferred schedule:
+#   "0 */1 * * *"  = every hour
+#   "0 */3 * * *"  = every 3 hours
+#   "0 */12 * * *" = every 12 hours
+#   "0 8,20 * * *" = 8am and 8pm daily
+```
+
+**Turning off heartbeat:**
+
+To disable heartbeat temporarily:
+
+```bash
+# Comment out the heartbeat cron
+crontab -e
+# Add # at the start of the heartbeat line
+```
+
+**Important note:** When adjusting heartbeat settings, remember you're changing the **heartbeat cron job**, not the internal OpenClaw heartbeat config. The internal heartbeat (in `openclaw.json`) should stay disabled.
 
 **Verify:**
 
 ```bash
-# Check heartbeat config
-cat ~/.openclaw/openclaw.json | jq '.agents.defaults.heartbeat'
+# Check heartbeat cron is installed
+crontab -l | grep heartbeat
 
-# Wait 1 hour and verify heartbeat ran (check logs)
-journalctl --user -u openclaw-gateway.service | grep heartbeat
+# Test heartbeat manually (don't wait 6 hours)
+curl -X POST http://localhost:3100/api/cron/wake -H 'Content-Type: application/json' -d '{"text":"Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK."}'
+
+# Check your bot responds with HEARTBEAT_OK or takes action
+# Check heartbeat log
+tail ~/clawd/logs/heartbeat.log
 ```
 
-- [ ] Heartbeat configured (1h interval, silent mode)
-- [ ] Verified heartbeat runs and checks kanban board
+- [ ] Heartbeat cron job installed (every 6 hours)
+- [ ] Tested manually and bot responds correctly
+- [ ] Understand how to adjust frequency or disable it
 
 ---
 
