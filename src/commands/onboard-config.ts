@@ -12,6 +12,14 @@ export function applyOnboardingLocalWorkspaceConfig(
         ...baseConfig.agents?.defaults,
         workspace: workspaceDir,
       },
+      list: baseConfig.agents?.list ?? [
+        {
+          id: "main",
+          default: true,
+          name: "Assistant",
+          workspace: workspaceDir,
+        },
+      ],
     },
     gateway: {
       ...baseConfig.gateway,
