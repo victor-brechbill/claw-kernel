@@ -76,7 +76,7 @@ for AUTH_FILE in agent_dirs:
 
     # Update the anthropic:manual profile with OAuth tokens
     auth_data["profiles"]["anthropic:manual"] = {
-        "type": "oauth",
+        "type": "claudeAiOauth",
         "provider": "anthropic",
         "access": "$ACCESS_TOKEN",
         "refresh": "$REFRESH_TOKEN",
@@ -85,7 +85,7 @@ for AUTH_FILE in agent_dirs:
 
     # Also update anthropic:default to point to the same tokens
     auth_data["profiles"]["anthropic:default"] = {
-        "type": "oauth",
+        "type": "claudeAiOauth",
         "provider": "anthropic",
         "access": "$ACCESS_TOKEN",
         "refresh": "$REFRESH_TOKEN",
