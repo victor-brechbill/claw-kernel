@@ -156,50 +156,6 @@ source ~/.bashrc
 
 (or `source ~/.zshrc` if using zsh)
 
-Or install manually:
-
-**1. Configure npm prefix:**
-
-```bash
-npm config set prefix ~/.npm-global
-```
-
-**2. Clone the repository:**
-
-```bash
-git clone https://github.com/victor-brechbill/claw-kernel.git ~/claw-kernel
-```
-
-```bash
-cd ~/claw-kernel
-```
-
-**3. Install dependencies:**
-
-```bash
-pnpm install
-```
-
-**4. Build:**
-
-```bash
-pnpm build
-```
-
-**5. Install globally:**
-
-```bash
-npm install -g .
-```
-
-**6. Reload your shell config:**
-
-```bash
-source ~/.bashrc
-```
-
-(or `source ~/.zshrc` if using zsh)
-
 ### Set up
 
 ```bash
