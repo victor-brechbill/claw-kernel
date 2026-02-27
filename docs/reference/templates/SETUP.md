@@ -902,19 +902,654 @@ ls ~/clawd/AGENTS.md ~/clawd/SOUL.md ~/clawd/USER.md ~/clawd/TOOLS.md ~/clawd/HE
 
 ---
 
+### ✅ Step 15: Bitwarden Password Manager
+
+**What this is:** Secure encrypted storage for all credentials, API keys, and secrets
+
+**Why it matters:** Your bot will need to access passwords, API keys, and tokens. Never store these in plain text files. Bitwarden provides encrypted vault storage with a master password.
+
+**Setup:**
+
+1. **Create Bitwarden account:**
+   - Go to [vault.bitwarden.com](https://vault.bitwarden.com)
+   - Sign up with your bot's email (e.g., `bot@yourdomain.com`)
+   - Choose a strong master password (you'll need this to unlock the vault)
+   - **Save this master password securely** (you can't recover it if lost)
+
+2. **Install Bitwarden CLI:**
+
+```bash
+# Download and install Bitwarden CLI
+curl -L https://vault.bitwarden.com/download/?app=cli&platform=linux -o bw.zip
+unzip bw.zip
+chmod +x bw
+sudo mv bw /usr/local/bin/
+rm bw.zip
+
+# Verify installation
+bw --version
+```
+
+3. **Set up encrypted master key storage:**
+
+```bash
+# Create secure directory
+mkdir -p ~/clawd/vault/.secrets
+chmod 700 ~/clawd/vault/.secrets
+
+# Store Bitwarden master password (encrypted with script)
+# You'll be prompted for the master password
+~/clawd/scripts/encrypt-master-key.sh
+
+# Verify encryption worked
+ls -la ~/clawd/vault/.secrets/
+# Should see: master_key.enc
+```
+
+4. **Test vault access:**
+
+```bash
+# Unlock vault (uses encrypted master key)
+export BW_SESSION=$(~/clawd/scripts/unlock-bitwarden.sh)
+
+# List items (should show empty vault for now)
+bw list items
+
+# Lock vault
+bw lock
+unset BW_SESSION
+```
+
+**What to store in Bitwarden:**
+
+- GitHub personal access tokens
+- Google OAuth credentials
+- API keys (Brave Search, etc.)
+- Bot email password
+- Database passwords
+- Any other secrets
+
+**Usage pattern:**
+
+```bash
+# 1. Unlock vault
+export BW_SESSION=$(~/clawd/scripts/unlock-bitwarden.sh)
+
+# 2. Retrieve secret
+PASSWORD=$(bw get password "GitHub PAT")
+
+# 3. Use the secret
+export GH_TOKEN="$PASSWORD"
+
+# 4. Lock vault when done
+bw lock
+unset BW_SESSION
+```
+
+**Important security rules:**
+
+- Never write passwords to plain text files
+- Never echo passwords to stdout/logs
+- Always lock vault after use
+- Encrypted master key file should NEVER be committed to git
+
+**Verify:**
+
+```bash
+# Check Bitwarden CLI installed
+bw --version
+
+# Check encrypted master key exists
+ls -la ~/clawd/vault/.secrets/master_key.enc
+
+# Test unlock script works
+~/clawd/scripts/unlock-bitwarden.sh && echo "Success"
+```
+
+- [ ] Bitwarden account created
+- [ ] Bitwarden CLI installed
+- [ ] Master key encrypted and stored
+- [ ] Tested vault unlock/lock
+
+---
+
+### ✅ Step 16: GitHub SSH Key Setup
+
+**What this is:** SSH key for bot to access your GitHub repositories
+
+**Why it matters:** Your bot needs to clone repos, push commits, and create PRs. SSH keys are more secure than HTTPS passwords.
+
+**Implementation:**
+
+```bash
+# Generate SSH key for bot
+ssh-keygen -t ed25519 -C "bot@yourdomain.com" -f ~/.ssh/github-bot -N ""
+
+# Start SSH agent
+eval "$(ssh-agent -s)"
+
+# Add key to agent
+ssh-add ~/.ssh/github-bot
+
+# Display public key (copy this)
+cat ~/.ssh/github-bot.pub
+```
+
+**Add to GitHub:**
+
+1. Copy the public key from above
+2. Go to [github.com/settings/keys](https://github.com/settings/keys)
+3. Click "New SSH key"
+4. Title: "Bot on [your-server-name]"
+5. Paste the public key
+6. Click "Add SSH key"
+
+**Configure SSH for GitHub:**
+
+```bash
+# Add to SSH config
+cat >> ~/.ssh/config << 'EOF'
+
+# GitHub bot key
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/github-bot
+  IdentitiesOnly yes
+EOF
+
+# Test connection
+ssh -T git@github.com
+# Should see: "Hi [username]! You've successfully authenticated..."
+```
+
+**Verify:**
+
+```bash
+# Test SSH connection to GitHub
+ssh -T git@github.com 2>&1 | grep "successfully authenticated"
+
+# Test clone (use a small public repo)
+cd /tmp && git clone git@github.com:torvalds/linux.git --depth 1 && rm -rf linux
+```
+
+- [ ] SSH key generated and added to GitHub
+- [ ] SSH config updated
+- [ ] Verified GitHub SSH authentication works
+
+---
+
+### ✅ Step 17: Dashboard Setup (Claw Interface)
+
+**What this is:** Web dashboard for kanban board, system monitoring, and agent management
+
+**Why it matters:** Visual interface for managing your bot's work, tracking tasks, and monitoring system health.
+
+**Architecture:**
+
+- **Claw Interface** - Open source dashboard (you'll fork this)
+- **Cloudflare Tunnel** - Secure public access without opening firewall ports
+- **Subdomain** - Access via `dashboard.yourdomain.com`
+
+**Step 1: Fork claw-interface**
+
+```bash
+# Clone your fork
+cd ~/clawd/vault/dev/repos/
+git clone git@github.com:YOUR-USERNAME/claw-interface.git
+cd claw-interface
+
+# Install dependencies
+npm install
+
+# Build production version
+npm run build
+```
+
+**Step 2: Set up subdomain DNS**
+
+1. Go to your domain registrar (Google Domains, Cloudflare, etc.)
+2. Add CNAME record:
+   - Name: `dashboard` (or `bot`, `nova`, etc.)
+   - Target: `your-tunnel-id.cfargotunnel.com` (you'll get this in next step)
+
+**Step 3: Install Cloudflare Tunnel**
+
+```bash
+# Install cloudflared
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+sudo mv cloudflared /usr/local/bin/
+sudo chmod +x /usr/local/bin/cloudflared
+
+# Authenticate with Cloudflare
+cloudflared tunnel login
+# Opens browser - sign in to your Cloudflare account
+
+# Create tunnel
+cloudflared tunnel create bot-dashboard
+# Note the tunnel ID shown
+
+# Configure tunnel
+cat > ~/.cloudflared/config.yml << EOF
+tunnel: bot-dashboard
+credentials-file: /home/ubuntu/.cloudflared/<TUNNEL-ID>.json
+
+ingress:
+  - hostname: dashboard.yourdomain.com
+    service: http://localhost:3080
+  - service: http_status:404
+EOF
+
+# Install tunnel as a service
+sudo cloudflared service install
+sudo systemctl enable cloudflared
+sudo systemctl start cloudflared
+```
+
+**Step 4: Configure dashboard backend**
+
+```bash
+cd ~/clawd/vault/dev/repos/claw-interface
+
+# Create .env file
+cat > .env << EOF
+PORT=3080
+MONGODB_URI=mongodb://localhost:27017/claw-interface
+NODE_ENV=production
+EOF
+
+# Start MongoDB (if not already running)
+sudo systemctl enable mongodb
+sudo systemctl start mongodb
+
+# Deploy dashboard
+./deploy.sh
+```
+
+**Step 5: Verify access**
+
+```bash
+# Check dashboard is running locally
+curl http://localhost:3080/api/health
+
+# Check Cloudflare tunnel status
+cloudflared tunnel info bot-dashboard
+
+# Test public access
+curl https://dashboard.yourdomain.com
+```
+
+**Verify:**
+
+```bash
+# Dashboard running locally
+curl -sf http://localhost:3080/api/health && echo "✓ Local OK"
+
+# Cloudflare tunnel active
+sudo systemctl status cloudflared | grep "active (running)"
+
+# Public access works
+curl -sf https://dashboard.yourdomain.com && echo "✓ Public OK"
+```
+
+- [ ] Forked claw-interface repo
+- [ ] Subdomain DNS configured
+- [ ] Cloudflare tunnel installed and running
+- [ ] Dashboard accessible at subdomain
+- [ ] MongoDB connected
+
+---
+
+### ✅ Step 18: Gmail OAuth Setup
+
+**What this is:** OAuth credentials for bot to read/send emails via Gmail API
+
+**Why it matters:** Your bot can monitor emails, send notifications, and handle correspondence automatically.
+
+**Step 1: Create Google Cloud Project**
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Create new project: "Bot Gmail Access"
+3. Enable Gmail API:
+   - Go to "APIs & Services" → "Library"
+   - Search "Gmail API"
+   - Click "Enable"
+
+**Step 2: Create OAuth credentials**
+
+1. Go to "APIs & Services" → "Credentials"
+2. Click "Create Credentials" → "OAuth client ID"
+3. Application type: "Desktop app"
+4. Name: "Bot Gmail Access"
+5. Click "Create"
+6. Download credentials JSON file
+7. Save as `~/clawd/vault/.secrets/gmail-credentials.json`
+
+**Step 3: Configure OAuth consent screen**
+
+1. Go to "OAuth consent screen"
+2. User type: "Internal" (if using Google Workspace) or "External"
+3. App name: "Bot Gmail Access"
+4. User support email: your bot's email
+5. Scopes: Add Gmail scopes:
+   - `gmail.readonly` (read emails)
+   - `gmail.send` (send emails)
+   - `gmail.modify` (mark as read, archive, etc.)
+
+**Step 4: Authorize bot**
+
+```bash
+# Install Gmail authentication script
+curl -o ~/clawd/scripts/gmail-auth.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/gmail-auth.sh
+
+chmod +x ~/clawd/scripts/gmail-auth.sh
+
+# Run OAuth flow (opens browser)
+~/clawd/scripts/gmail-auth.sh authorize
+
+# Follow prompts to sign in with bot's Google account
+# Accept permissions
+# Script saves refresh token to Bitwarden
+```
+
+**Step 5: Test Gmail access**
+
+```bash
+# List recent emails
+~/clawd/scripts/gmail-list.sh --max 10
+
+# Send test email
+~/clawd/scripts/gmail-send.sh \
+  --to "you@example.com" \
+  --subject "Test from bot" \
+  --body "Gmail access working!"
+```
+
+**Verify:**
+
+```bash
+# OAuth credentials exist
+ls -la ~/clawd/vault/.secrets/gmail-credentials.json
+
+# Test list emails
+~/clawd/scripts/gmail-list.sh --max 1 && echo "✓ Read access OK"
+
+# Check refresh token in Bitwarden
+bw list items | grep "Gmail Refresh Token"
+```
+
+- [ ] Google Cloud project created
+- [ ] Gmail API enabled
+- [ ] OAuth credentials downloaded
+- [ ] Bot authorized via OAuth flow
+- [ ] Tested email read/send
+
+---
+
+### ✅ Step 19: Email Monitoring Cron
+
+**What this is:** Periodic email check for urgent messages
+
+**Why it matters:** Your bot can respond to emails automatically or notify you of important messages.
+
+**How it works:**
+
+1. Cron runs every hour
+2. Script checks for unread emails
+3. Filters by priority:
+   - From specific senders (your allowlist)
+   - Marked as important
+   - Certain subject keywords
+4. Bot notifies you via Telegram if urgent email detected
+5. Bot can auto-respond to specific email types
+
+**Implementation:**
+
+```bash
+# Download email monitoring script
+curl -o ~/clawd/scripts/email-monitor.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/email-monitor.sh
+
+chmod +x ~/clawd/scripts/email-monitor.sh
+
+# Configure email filters (edit this file)
+cat > ~/clawd/.email-filters.json << 'EOF'
+{
+  "priority_senders": [
+    "boss@company.com",
+    "client@important.com"
+  ],
+  "priority_keywords": [
+    "urgent",
+    "asap",
+    "emergency"
+  ],
+  "auto_reply_patterns": {
+    "out of office": "I'm currently away...",
+    "meeting request": "Please check my calendar..."
+  }
+}
+EOF
+
+# Add to cron (runs every hour)
+(crontab -l 2>/dev/null; echo "0 * * * * ~/clawd/scripts/email-monitor.sh >> ~/clawd/logs/email-monitor.log 2>&1") | crontab -
+```
+
+**What the bot does:**
+
+- **Silent monitoring** - Most emails are just logged, no notification
+- **Priority alert** - Urgent emails trigger Telegram message to you
+- **Auto-respond** - Optional: Bot can reply to specific email patterns
+- **Smart filtering** - Learns from your responses over time
+
+**Verify:**
+
+```bash
+# Test email monitor manually
+~/clawd/scripts/email-monitor.sh --dry-run
+
+# Check cron job installed
+crontab -l | grep email-monitor
+
+# Send yourself a test "urgent" email and wait for notification
+```
+
+- [ ] Email monitoring script installed
+- [ ] Email filters configured
+- [ ] Cron job added (hourly)
+- [ ] Tested with dry-run
+
+---
+
+### ✅ Step 20: Daily System Maintenance
+
+**What this is:** Automated daily maintenance tasks (backups, updates, cleanup, health checks)
+
+**Why it matters:** Prevents system degradation, catches issues early, keeps everything running smoothly.
+
+**What it does (runs at 5:00 AM daily):**
+
+1. **OS updates** - Check for security updates, install if available
+2. **Disk cleanup** - Remove old logs, temp files, Docker images
+3. **Backup verification** - Ensure yesterday's backup exists in Google Drive
+4. **Security audit** - Check for unauthorized access, failed login attempts
+5. **Cron job health** - Verify all cron jobs ran successfully
+6. **Gateway health** - Check gateway logs for errors or warnings
+7. **Memory usage** - Alert if memory >80%
+8. **Disk space** - Alert if disk >85%
+
+**Implementation:**
+
+```bash
+# Download maintenance script
+curl -o ~/clawd/scripts/daily-maintenance.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/daily-maintenance.sh
+
+chmod +x ~/clawd/scripts/daily-maintenance.sh
+
+# Test maintenance script (dry-run)
+~/clawd/scripts/daily-maintenance.sh --dry-run
+
+# Add to cron (5:00 AM daily)
+(crontab -l 2>/dev/null; echo "0 5 * * * ~/clawd/scripts/daily-maintenance.sh >> ~/clawd/logs/maintenance.log 2>&1") | crontab -
+```
+
+**What you'll see:**
+
+- **Daily summary** - Bot messages you each morning with maintenance report
+- **Only alerts on issues** - If everything is healthy, just a brief "✓ All systems OK"
+- **Actionable warnings** - If something needs attention, bot explains what and why
+
+**Example daily report:**
+
+```
+🔧 Daily Maintenance (2026-02-28)
+
+✓ OS updates: None available
+✓ Disk cleanup: Freed 2.3 GB
+✓ Backup: Verified in Google Drive
+✓ Security: No issues
+✓ Cron jobs: All 6 jobs ran successfully
+✓ Gateway: Healthy (no errors)
+⚠ Memory: 78% (within limits)
+✓ Disk: 45% used
+
+Status: All systems OK
+```
+
+**Verify:**
+
+```bash
+# Check maintenance script exists
+ls -l ~/clawd/scripts/daily-maintenance.sh
+
+# Run dry-run to see what it checks
+~/clawd/scripts/daily-maintenance.sh --dry-run
+
+# Check cron job scheduled
+crontab -l | grep daily-maintenance
+
+# Review sample maintenance log
+tail ~/clawd/logs/maintenance.log
+```
+
+- [ ] Daily maintenance script installed
+- [ ] Tested with dry-run
+- [ ] Cron job scheduled (5 AM daily)
+- [ ] Understand what gets checked
+
+---
+
+### ✅ Step 21: Self-Improvement System
+
+**What this is:** Bot learns from mistakes and improves its own behavior over time
+
+**Why it matters:** Your bot gets smarter the longer you use it. Errors become lessons. Corrections become permanent improvements.
+
+**How it works:**
+
+1. **Error capture** - When commands fail or produce unexpected results
+2. **User corrections** - When you say "No, that's wrong..." or "Actually..."
+3. **External failures** - API errors, timeouts, rate limits
+4. **Learning synthesis** - Once per week, bot reviews all learnings and updates its knowledge
+5. **Skill updates** - Bot can modify its own operating instructions based on lessons learned
+
+**What triggers learning:**
+
+- ❌ Command failures (exit code != 0)
+- ❌ API errors (timeouts, 4xx/5xx responses)
+- 🔄 User corrections ("That's wrong", "No, do it this way")
+- 💡 Discoveries (better approaches, new tools, workflow improvements)
+- 🐛 Bugs found and fixed
+
+**Implementation:**
+
+```bash
+# Download self-improvement script
+curl -o ~/clawd/scripts/self-improve.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/self-improve.sh
+
+chmod +x ~/clawd/scripts/self-improve.sh
+
+# Create learnings directory
+mkdir -p ~/clawd/memory/learnings
+
+# Add to cron (Sunday at 2:00 AM)
+(crontab -l 2>/dev/null; echo "0 2 * * 0 ~/clawd/scripts/self-improve.sh >> ~/clawd/logs/self-improvement.log 2>&1") | crontab -
+```
+
+**What the bot does weekly:**
+
+1. **Review error logs** from past week
+2. **Extract patterns** - Similar failures, recurring issues
+3. **Update MEMORY.md** - Add lessons learned
+4. **Update skills** - Modify AGENTS.md, TOOLS.md if workflows improved
+5. **Create reminders** - Schedule follow-ups for unresolved issues
+
+**Example learning entry:**
+
+```markdown
+## 2026-02-28 - OAuth Token Sync Failure
+
+**What happened:** sync-oauth-tokens.sh wrote `type: "oauth"` but needed `type: "claudeAiOauth"`
+
+**Impact:** Fresh installations failed with "No API key found"
+
+**Fix:** PR #42 changed sync script to use correct type
+
+**Lesson:** Always verify token type matches Claude Code's credential format
+
+**Prevention:** Added type validation check to sync script
+```
+
+**Verify:**
+
+```bash
+# Check self-improvement script exists
+ls -l ~/clawd/scripts/self-improve.sh
+
+# Test learning capture
+echo "Test learning: Always verify before deploying" > ~/clawd/memory/learnings/$(date +%Y-%m-%d)-test.md
+
+# Check cron job scheduled
+crontab -l | grep self-improve
+
+# Review learnings directory
+ls ~/clawd/memory/learnings/
+```
+
+- [ ] Self-improvement script installed
+- [ ] Learnings directory created
+- [ ] Cron job scheduled (weekly)
+- [ ] Understand how bot learns from errors
+
+---
+
 ## ✅ Setup Complete!
 
 When all boxes above are checked:
 
 1. Congratulate the user 🎉
 2. Summarize what's now in place:
-   - Core agent config (Opus 4.6 main, Sonnet 4.6 sub-agents, 200k context)
-   - Hooks & memory system (automatic daily logs)
-   - OAuth tokens refresh automatically
-   - Heartbeat enabled (proactive check-ins)
-   - Daily backups to Google Drive
-   - Security hardened (firewall, SSH, fail2ban)
-   - Gateway health monitoring
+   - **Core infrastructure:**
+     - Opus 4.6 main agent, Sonnet 4.6 sub-agents, 200k context
+     - OAuth tokens refresh automatically (every 6 hours)
+     - Heartbeat enabled (proactive 6-hour check-ins)
+     - Memory system with daily logs
+   - **Security & backups:**
+     - Bitwarden password manager (encrypted credentials)
+     - GitHub SSH key configured
+     - Daily backups to Google Drive (4 AM)
+     - Security hardened (firewall, SSH, fail2ban)
+   - **Monitoring & maintenance:**
+     - Gateway health watchdog (every 5 minutes)
+     - Email monitoring (hourly)
+     - Daily system maintenance (5 AM)
+     - Weekly self-improvement (Sunday 2 AM)
+   - **Dashboard & communication:**
+     - Claw Interface dashboard (public via Cloudflare tunnel)
+     - Gmail OAuth configured (read/send emails)
 3. Ask: "Should I delete this SETUP.md file? You won't need it anymore."
 4. If yes → delete the file
 
