@@ -51,14 +51,14 @@ export async function finalizeOnboardingWizard(
 
   const withWizardProgress = async <T>(
     label: string,
-    options: { doneMessage?: string },
+    progressOptions: { doneMessage?: string },
     work: (progress: { update: (message: string) => void }) => Promise<T>,
   ): Promise<T> => {
     const progress = prompter.progress(label);
     try {
       return await work(progress);
     } finally {
-      progress.stop(options.doneMessage);
+      progress.stop(progressOptions.doneMessage);
     }
   };
 
@@ -230,6 +230,89 @@ export async function finalizeOnboardingWizard(
     if (!controlUiAssets.ok && controlUiAssets.message) {
       runtime.error(controlUiAssets.message);
     }
+  }
+
+  // Sync Claude Code OAuth tokens to OpenClaw if they exist
+  try {
+    const { readClaudeCliCredentials } = await import("../agents/cli-credentials.js");
+    const { upsertAuthProfile } = await import("../agents/auth-profiles.js");
+    const { resolveOpenClawStateDir } = await import("../infra/openclaw-root.js");
+
+    const claudeCreds = readClaudeCliCredentials({ allowKeychainPrompt: false });
+    if (claudeCreds && claudeCreds.type === "oauth") {
+      const stateDir = resolveOpenClawStateDir();
+      const agentsDir = path.join(stateDir, "agents");
+
+      // Check if agents directory exists
+      const agentsDirExists = await fs
+        .access(agentsDir)
+        .then(() => true)
+        .catch(() => false);
+
+      if (agentsDirExists) {
+        // Find all agent directories
+        const entries = await fs.readdir(agentsDir, { withFileTypes: true });
+        const agentDirs = entries
+          .filter((entry) => entry.isDirectory())
+          .map((entry) => path.join(agentsDir, entry.name, "agent"));
+
+        let syncedCount = 0;
+        for (const agentDir of agentDirs) {
+          const agentDirExists = await fs
+            .access(agentDir)
+            .then(() => true)
+            .catch(() => false);
+
+          if (agentDirExists) {
+            // Write OAuth credentials to both :default and :manual profiles
+            upsertAuthProfile({
+              profileId: "anthropic:default",
+              credential: {
+                type: "oauth",
+                provider: "anthropic",
+                access: claudeCreds.access,
+                refresh: claudeCreds.refresh,
+                expires: claudeCreds.expires,
+              },
+              agentDir,
+            });
+
+            upsertAuthProfile({
+              profileId: "anthropic:manual",
+              credential: {
+                type: "oauth",
+                provider: "anthropic",
+                access: claudeCreds.access,
+                refresh: claudeCreds.refresh,
+                expires: claudeCreds.expires,
+              },
+              agentDir,
+            });
+
+            syncedCount++;
+          }
+        }
+
+        if (syncedCount > 0) {
+          const expiresDate = new Date(claudeCreds.expires);
+          await prompter.note(
+            [
+              `Synced Claude Code OAuth tokens to ${syncedCount} agent ${syncedCount === 1 ? "directory" : "directories"}.`,
+              `Token expires: ${expiresDate.toISOString()}`,
+              "",
+              "To keep tokens fresh after expiry, set up automatic refresh:",
+              "Docs: https://docs.openclaw.ai/reference/oauth-token-refresh",
+            ].join("\n"),
+            "OAuth tokens",
+          );
+        }
+      }
+    }
+  } catch (err) {
+    // Non-critical: if token sync fails, don't block onboarding
+    runtime.warn(
+      `Failed to sync Claude Code OAuth tokens: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   await prompter.note(
