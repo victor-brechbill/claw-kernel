@@ -58,9 +58,17 @@ ssh -i your-key.pem ubuntu@YOUR_EC2_IP
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node -v  # Verify v22.x.x
 ```
+
+```bash
+sudo apt-get install -y nodejs
+```
+
+```bash
+node -v
+```
+
+(Should show v22.x.x or higher)
 
 #### 2. Anthropic Account (Claude API Access)
 
@@ -72,9 +80,35 @@ node -v  # Verify v22.x.x
 
 **Setup:**
 
-1. Go to [claude.ai](https://claude.ai) and sign up
-2. Subscribe to Pro Max ($200/mo) or Pro plan
-3. You'll use OAuth during `openclaw onboard` (no API key needed)
+1. **Sign up for Anthropic:**
+   - Go to [claude.ai](https://claude.ai) and create an account
+   - Subscribe to Pro Max ($200/mo) or Pro plan ($20/mo + $100 usage)
+
+2. **Install Claude Code on your EC2 server:**
+
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   ```
+
+   ```bash
+   source ~/.bashrc
+   ```
+
+   ```bash
+   claude --version
+   ```
+
+   (Should show Claude Code version)
+
+3. **Get your OAuth token:**
+
+   ```bash
+   claude setup-token
+   ```
+
+   - This opens a browser link — visit it and authorize
+   - Copy the token it provides
+   - **Save this token** — you'll paste it during `openclaw onboard`
 
 **Note:** API keys are supported but NOT recommended (expensive, ~$100/day). OAuth uses your Pro subscription and is much more cost-effective.
 
@@ -108,29 +142,19 @@ Save the token and your user ID - you'll need both during onboarding.
 
 ### Install
 
+**Run the install script:**
+
 ```bash
-# 1. Run the install script
 curl -fsSL https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/install-claw-kernel.sh | bash
-
-# 2. Reload your shell config
-source ~/.bashrc  # (or ~/.zshrc if using zsh)
 ```
 
-Or install manually:
+**Reload your shell config:**
 
 ```bash
-# 1. Configure npm prefix
-npm config set prefix ~/.npm-global
-
-# 2. Clone and build
-git clone https://github.com/victor-brechbill/claw-kernel.git ~/claw-kernel
-cd ~/claw-kernel
-pnpm install && pnpm build
-npm install -g .
-
-# 3. Reload your shell config
-source ~/.bashrc  # (or ~/.zshrc if using zsh)
+source ~/.bashrc
 ```
+
+(or `source ~/.zshrc` if using zsh)
 
 ### Set up
 
