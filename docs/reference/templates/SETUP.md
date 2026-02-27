@@ -19,7 +19,9 @@ _Onboarding complete! Now let's build out your production environment together._
 
 1. **Greet the user warmly** - they just completed onboard!
 2. **Summarize what this setup wizard will do:**
+   - Core agent configuration (performance, OAuth models)
    - Telegram configuration (privacy, chat settings)
+   - Hooks & memory system (automatic logging)
    - OAuth token refresh (prevents 24h agent death)
    - Heartbeat (proactive check-ins)
    - Timezone (correct timestamps)
@@ -30,7 +32,7 @@ _Onboarding complete! Now let's build out your production environment together._
    - "I'll walk you through each step one at a time"
    - "For each step, I'll explain what it is, why it matters, and either set it up for you or guide you through it"
    - "We can take breaks - just let me know and we'll pick up where we left off"
-4. **Ask:** "Ready to start with Step 1: OAuth Token Refresh?"
+4. **Ask:** "Ready to start with Step 1: Core Agent Configuration?"
 
 ### During Setup - Step-by-Step Process
 
@@ -71,7 +73,355 @@ _Onboarding complete! Now let's build out your production environment together._
 
 ## Setup Steps
 
-### ✅ Step 0: Telegram Configuration
+### ✅ Step 1: Core Agent Configuration
+
+**What this is:** Configure agent performance settings, model registration, and behavior
+
+**Why it matters:** These settings determine context size, caching behavior, streaming mode, and **OAuth model registration** (critical for authentication).
+
+**What we'll configure:**
+
+1. **Models registration** - Register your primary model (critical for OAuth!)
+2. **Context window** - 200k tokens for large conversations
+3. **Context pruning** - Cache optimization (cache-ttl, 5m)
+4. **Compaction** - Automatic memory optimization
+5. **Block streaming** - Wait for complete responses (cleaner UX)
+6. **Timeout** - 1 hour for long-running tasks
+
+**Check current config:**
+
+```bash
+# View agent defaults
+cat ~/.openclaw/openclaw.json | jq '.agents.defaults'
+```
+
+**Recommended settings:**
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-opus-4-6"
+      },
+      "models": {
+        "anthropic/claude-opus-4-6": {},
+        "anthropic/claude-sonnet-4-6": {}
+      },
+      "contextTokens": 200000,
+      "contextPruning": {
+        "mode": "cache-ttl",
+        "ttl": "5m"
+      },
+      "compaction": {
+        "mode": "default",
+        "memoryFlush": {
+          "enabled": true
+        }
+      },
+      "blockStreamingDefault": "on",
+      "timeoutSeconds": 3600
+    }
+  }
+}
+```
+
+**What each setting means:**
+
+- **`models`** - **CRITICAL:** Registers models for OAuth authentication. Without this, OAuth won't work!
+- **`contextTokens: 200000`** - Full 200k context window
+- **`contextPruning`** - Keeps cache fresh (5 minute TTL)
+- **`compaction.memoryFlush`** - Automatically compacts memory when full
+- **`blockStreamingDefault: "on"`** - Waits for full response before sending (no partial messages)
+- **`timeoutSeconds: 3600`** - 1 hour timeout (important for long code reviews, etc.)
+
+**Implementation:**
+
+I'll update your config with these settings using the `gateway` tool's `config.patch` action. This safely merges the settings without overwriting your existing config.
+
+**Verify:**
+
+```bash
+# Check models are registered
+cat ~/.openclaw/openclaw.json | jq '.agents.defaults.models'
+
+# Check context window
+cat ~/.openclaw/openclaw.json | jq '.agents.defaults.contextTokens'
+
+# Check all performance settings
+cat ~/.openclaw/openclaw.json | jq '.agents.defaults | {contextPruning, compaction, blockStreamingDefault, timeoutSeconds}'
+```
+
+- [ ] Models registered (Opus 4.6, Sonnet 4.6)
+- [ ] Context window set to 200k
+- [ ] Performance settings configured
+- [ ] Verified with config check
+
+---
+
+### ✅ Step 2: Sub-Agent Configuration
+
+**What this is:** Configure developer and code-reviewer agents with appropriate models
+
+**Why it matters:** Developer and reviewer agents should use Sonnet 4.6 (faster, cheaper) while main uses Opus 4.6 (smarter).
+
+**Check current config:**
+
+```bash
+# View agents list
+cat ~/.openclaw/openclaw.json | jq '.agents.list'
+```
+
+**Recommended agents:**
+
+```json
+{
+  "agents": {
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "name": "Assistant",
+        "workspace": "/home/ubuntu/clawd"
+      },
+      {
+        "id": "developer",
+        "name": "Developer",
+        "workspace": "/home/ubuntu/clawd-developer",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": {
+          "name": "Developer",
+          "emoji": "💻"
+        }
+      },
+      {
+        "id": "code-reviewer",
+        "name": "Code Reviewer",
+        "workspace": "/home/ubuntu/clawd-code-reviewer",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": {
+          "name": "Code Reviewer",
+          "emoji": "🔍"
+        }
+      }
+    ]
+  }
+}
+```
+
+**What this means:**
+
+- **Main agent:** Uses Opus 4.6 (from defaults) - best for general chat, orchestration
+- **Developer agent:** Uses Sonnet 4.6 - fast enough for coding tasks
+- **Code reviewer agent:** Uses Sonnet 4.6 - fast for code review
+
+**Implementation:**
+
+I'll add developer and code-reviewer agents to your config if they don't exist.
+
+**Verify:**
+
+```bash
+# Check agents are configured
+cat ~/.openclaw/openclaw.json | jq '.agents.list[] | {id, model}'
+```
+
+- [ ] Developer agent configured (Sonnet 4.6)
+- [ ] Code reviewer agent configured (Sonnet 4.6)
+- [ ] Main agent uses Opus 4.6 (from defaults)
+
+---
+
+### ✅ Step 3: Hooks & Memory System
+
+**What this is:** Enable automatic memory logging to daily files
+
+**Why it matters:** Without hooks, the memory system doesn't work. Daily logs won't be created automatically.
+
+**Check current config:**
+
+```bash
+# View hooks config
+cat ~/.openclaw/openclaw.json | jq '.hooks'
+```
+
+**Recommended settings:**
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "path": "/hooks",
+    "token": "your-webhook-token-here",
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "command-logger": {
+          "enabled": true
+        },
+        "session-memory": {
+          "enabled": true
+        },
+        "boot-md": {
+          "enabled": true
+        }
+      }
+    }
+  }
+}
+```
+
+**What each hook does:**
+
+- **`session-memory`** - Automatically writes to `memory/YYYY-MM-DD.md` after each session
+- **`boot-md`** - Processes BOOTSTRAP.md on first run
+- **`command-logger`** - Logs commands for debugging
+
+**Implementation:**
+
+I'll enable hooks with a secure random webhook token.
+
+**Verify:**
+
+```bash
+# Check hooks are enabled
+cat ~/.openclaw/openclaw.json | jq '.hooks.enabled'
+
+# Check internal hooks
+cat ~/.openclaw/openclaw.json | jq '.hooks.internal.entries | keys'
+
+# Wait for next session, then check memory file was created
+ls ~/clawd/memory/
+```
+
+- [ ] Hooks enabled with webhook token
+- [ ] Session-memory hook configured
+- [ ] Verified memory directory exists
+
+---
+
+### ✅ Step 4: Tools & Integrations
+
+**What this is:** Enable web search and agent-to-agent communication
+
+**Why it matters:** Web search lets the agent look things up. Agent-to-agent enables sub-agent orchestration.
+
+**Check current config:**
+
+```bash
+# View tools config
+cat ~/.openclaw/openclaw.json | jq '.tools'
+```
+
+**Recommended settings:**
+
+```json
+{
+  "tools": {
+    "web": {
+      "search": {
+        "provider": "brave",
+        "apiKey": "YOUR_BRAVE_API_KEY"
+      }
+    },
+    "agentToAgent": {
+      "enabled": true
+    }
+  }
+}
+```
+
+**What each tool does:**
+
+- **`web.search`** - Brave Search API for web lookups (optional, requires API key)
+- **`agentToAgent`** - Enables sub-agent spawning (developer, reviewer, etc.)
+
+**Implementation:**
+
+I'll enable agent-to-agent communication. Web search is optional - if you have a Brave API key, I can add it.
+
+**Get Brave API key (optional):**
+
+1. Go to https://brave.com/search/api/
+2. Sign up for free tier (2000 searches/month)
+3. Copy API key
+
+**Verify:**
+
+```bash
+# Check agent-to-agent is enabled
+cat ~/.openclaw/openclaw.json | jq '.tools.agentToAgent.enabled'
+
+# If you added Brave API key:
+cat ~/.openclaw/openclaw.json | jq '.tools.web.search.provider'
+```
+
+- [ ] Agent-to-agent communication enabled
+- [ ] Web search configured (optional - skip if no API key)
+
+---
+
+### ✅ Step 5: Message & Command Settings
+
+**What this is:** Configure message queueing, reactions, and command behavior
+
+**Why it matters:** Controls how the agent handles concurrent messages and what commands are available.
+
+**Check current config:**
+
+```bash
+# View message settings
+cat ~/.openclaw/openclaw.json | jq '{messages, commands}'
+```
+
+**Recommended settings:**
+
+```json
+{
+  "messages": {
+    "queue": {
+      "mode": "interrupt",
+      "byChannel": {
+        "telegram": "interrupt"
+      }
+    },
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": false,
+    "nativeSkills": false,
+    "restart": true
+  }
+}
+```
+
+**What each setting means:**
+
+- **`queue.mode: "interrupt"`** - New messages interrupt current processing (responsive)
+- **`ackReactionScope: "group-mentions"`** - Only react to acknowledgments in groups when mentioned
+- **`commands.native: false`** - Disable built-in slash commands (use natural language instead)
+- **`commands.restart: true`** - Enable `/restart` command
+
+**Implementation:**
+
+I'll update these settings using config.patch.
+
+**Verify:**
+
+```bash
+# Check message queue mode
+cat ~/.openclaw/openclaw.json | jq '.messages.queue.mode'
+
+# Check commands
+cat ~/.openclaw/openclaw.json | jq '.commands'
+```
+
+- [ ] Message queue set to interrupt mode
+- [ ] Commands configured (native: false, restart: true)
+
+---
+
+### ✅ Step 6: Telegram Configuration
 
 **What this is:** Properly configure Telegram privacy, chat settings, and behavior
 
@@ -79,10 +429,10 @@ _Onboarding complete! Now let's build out your production environment together._
 
 **What we'll configure:**
 
-1. **Privacy - Ensure bot is private (only you can message it)**
-2. **Chat settings - Interrupt mode, reasoning, streaming**
-3. **DM policy - Allowlist with only your Telegram ID**
-4. **Reactions - Set to minimal or off**
+1. **Privacy** - Ensure bot is private (only you can message it)
+2. **Chat settings** - Stream mode, reactions
+3. **DM policy** - Allowlist with only your Telegram ID
+4. **Commands** - Disable native Telegram commands
 
 **Check current config:**
 
@@ -101,8 +451,8 @@ cat ~/.openclaw/openclaw.json | jq '.channels.telegram'
     "allowFrom": [YOUR_TELEGRAM_USER_ID],
     "groupPolicy": "allowlist",
     "streamMode": "block",
-    "reactions": {
-      "mode": "minimal"
+    "commands": {
+      "native": false
     }
   }
 }
@@ -111,10 +461,10 @@ cat ~/.openclaw/openclaw.json | jq '.channels.telegram'
 **What each setting means:**
 
 - **`dmPolicy: "allowlist"`** - Only people in `allowFrom` can DM the bot (private)
-- **`allowFrom: [YOUR_ID]`** - Your Telegram user ID (the bot will tell you this)
+- **`allowFrom: [YOUR_ID]`** - Your Telegram user ID (I can tell you this)
 - **`groupPolicy: "allowlist"`** - Bot won't join groups unless explicitly allowed
 - **`streamMode: "block"`** - Waits until full response ready before sending (cleaner UX)
-- **`reactions.mode: "minimal"`** - Bot reacts sparingly (not every message)
+- **`commands.native: false`** - Disables Telegram slash commands (use natural language)
 
 **Implementation:**
 
@@ -140,12 +490,12 @@ cat ~/.openclaw/openclaw.json | jq '.channels.telegram.allowFrom'  # Should cont
 ```
 
 - [ ] Telegram privacy configured (allowlist, only your user ID)
-- [ ] Chat settings optimized (stream mode, reactions, reasoning)
+- [ ] Chat settings optimized (stream mode: block, native commands: false)
 - [ ] Verified bot ignores messages from other users
 
 ---
 
-### ✅ Step 1: OAuth Token Refresh
+### ✅ Step 7: OAuth Token Refresh
 
 **What this is:** Automatic refresh of Claude Code OAuth tokens every 6 hours
 
@@ -184,7 +534,7 @@ cat ~/.claude/.credentials.json | jq '.claudeAiOauth.expiresAt'
 
 ---
 
-### ✅ Step 2: Heartbeat Configuration
+### ✅ Step 8: Heartbeat Configuration
 
 **What this is:** Periodic automated check-ins where the bot proactively looks for work
 
@@ -193,7 +543,7 @@ cat ~/.claude/.credentials.json | jq '.claudeAiOauth.expiresAt'
 **What we'll configure:**
 
 1. **Heartbeat frequency** - How often to check in (recommended: every 1 hour for OAuth users)
-2. **Heartbeat target** - Where to send check-in messages (usually "none" = silent, or specific channel)
+2. **Heartbeat target** - Where to send check-in messages (usually "none" = silent)
 3. **What the bot checks** - Kanban board, email, calendar, agent status
 
 **Check current config:**
@@ -244,7 +594,7 @@ journalctl --user -u openclaw-gateway.service | grep heartbeat
 
 ---
 
-### ✅ Step 3: Timezone Configuration
+### ✅ Step 9: Timezone Configuration
 
 **What this is:** Set your local timezone so timestamps make sense
 
@@ -255,9 +605,6 @@ journalctl --user -u openclaw-gateway.service | grep heartbeat
 ```bash
 # System timezone
 timedatectl
-
-# Agent timezone (if configured)
-cat ~/.openclaw/openclaw.json | jq '.timezone'
 ```
 
 **Set timezone:**
@@ -290,7 +637,7 @@ date
 
 ---
 
-### ✅ Step 4: Automated Backups
+### ✅ Step 10: Automated Backups
 
 **What this is:** Daily backups of your workspace, config, and databases to Google Drive
 
@@ -349,7 +696,7 @@ crontab -l | grep backup-to-gdrive
 
 ---
 
-### ✅ Step 5: Security Hardening
+### ✅ Step 11: Security Hardening
 
 **What this is:** SSH hardening, firewall, automatic updates, fail2ban
 
@@ -392,7 +739,7 @@ grep "PasswordAuthentication no" /etc/ssh/sshd_config
 
 ---
 
-### ✅ Step 6: Gateway Health Monitoring
+### ✅ Step 12: Gateway Health Monitoring
 
 **What this is:** Watchdog script that detects gateway deadlocks and auto-restarts
 
@@ -425,128 +772,11 @@ crontab -l | grep healthcheck-gateway
 
 ---
 
-### ✅ Step 7: Pre-commit Hooks (Optional)
+### ✅ Step 13: Memory Directory Setup
 
-**What this is:** Git hooks that prevent committing secrets (gitleaks), run linters, format code
+**What this is:** Create memory directory for daily logs
 
-**Why it matters:** Accidentally committing API keys is a common security breach
-
-**Implementation:**
-
-```bash
-# Install gitleaks
-cd /tmp
-wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
-tar -xzf gitleaks_8.18.0_linux_x64.tar.gz
-sudo mv gitleaks /usr/local/bin/
-gitleaks version
-
-# Install pre-commit in your repos
-cd ~/clawd/vault/dev/repos/your-repo
-curl -o .pre-commit-config.yaml \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/.pre-commit-config.yaml
-
-# Install pre-commit tool
-pip install pre-commit
-pre-commit install
-```
-
-**Verify:**
-
-```bash
-# Test pre-commit hooks
-cd ~/clawd/vault/dev/repos/your-repo
-pre-commit run --all-files
-```
-
-- [ ] Pre-commit hooks installed (optional - skip if not using git workflows)
-
----
-
-### ✅ Step 8: Dashboard Setup (Optional)
-
-**What this is:** Web dashboard for kanban board, system monitoring, Tommy/Stocks pages
-
-**Why it matters:** Nice UI for managing your agent, tracking tasks, viewing metrics
-
-**Implementation:**
-
-```bash
-# Fork claw-interface
-# Go to https://github.com/victor-brechbill/claw-interface
-# Click "Fork" button
-
-# Clone your fork
-cd ~/clawd/vault/dev/repos/
-git clone https://github.com/YOUR-USERNAME/claw-interface.git dashboard
-
-# Install dependencies
-cd dashboard
-npm install
-
-# Configure
-cp .env.example .env
-# Edit .env with your settings
-
-# Build and start
-npm run build
-./deploy.sh
-```
-
-**Verify:**
-
-```bash
-# Check dashboard is running
-curl http://localhost:3080/api/cards
-```
-
-- [ ] Dashboard forked, deployed, and running (optional)
-
----
-
-### ✅ Step 9: System Maintenance Cron
-
-**What this is:** Daily maintenance job (OS updates, cleanup, health checks)
-
-**Why it matters:** Keeps system healthy, prevents disk space issues, applies security patches
-
-**Implementation:**
-
-This is typically set up via OpenClaw's built-in cron system rather than system cron.
-
-**Via OpenClaw:**
-
-```javascript
-// Daily at 5am local time
-{
-  "name": "Daily System Maintenance",
-  "schedule": { "kind": "cron", "expr": "0 5 * * *" },
-  "payload": {
-    "kind": "systemEvent",
-    "text": "Run daily system maintenance: OS updates, cleanup, security audit, backup verification, cron health check"
-  },
-  "delivery": { "mode": "announce" },
-  "sessionTarget": "main",
-  "enabled": true
-}
-```
-
-**Verify:**
-
-```bash
-# Check OpenClaw cron jobs
-# (The bot can do this via cron tool)
-```
-
-- [ ] Daily system maintenance cron job configured
-
----
-
-### ✅ Step 10: Memory System
-
-**What this is:** Daily memory logs + long-term curated MEMORY.md
-
-**Why it matters:** Your agent wakes up fresh each session. Memory files provide continuity.
+**Why it matters:** The memory system (configured in Step 3) needs this directory to exist.
 
 **Implementation:**
 
@@ -554,14 +784,14 @@ This is typically set up via OpenClaw's built-in cron system rather than system 
 # Create memory directory
 mkdir -p ~/clawd/memory
 
-# Memory files are auto-created by the agent
+# Memory files are auto-created by the session-memory hook
 # Daily: ~/clawd/memory/YYYY-MM-DD.md (raw logs)
 # Long-term: ~/clawd/MEMORY.md (curated insights)
 ```
 
 **The bot will:**
 
-- Write to `memory/YYYY-MM-DD.md` during sessions
+- Write to `memory/YYYY-MM-DD.md` during sessions (via session-memory hook)
 - Periodically review daily logs and update `MEMORY.md`
 - Load `MEMORY.md` at session start for context
 
@@ -576,7 +806,7 @@ ls ~/clawd/memory/
 
 ---
 
-### ✅ Step 11: Documentation Review
+### ✅ Step 14: Documentation Review
 
 **What this is:** Quick review of key docs to know where to find help
 
@@ -605,11 +835,13 @@ When all boxes above are checked:
 
 1. Congratulate the user 🎉
 2. Summarize what's now in place:
+   - Core agent config (Opus 4.6 main, Sonnet 4.6 sub-agents, 200k context)
+   - Hooks & memory system (automatic daily logs)
    - OAuth tokens refresh automatically
+   - Heartbeat enabled (proactive check-ins)
    - Daily backups to Google Drive
    - Security hardened (firewall, SSH, fail2ban)
    - Gateway health monitoring
-   - System maintenance scheduled
 3. Ask: "Should I delete this SETUP.md file? You won't need it anymore."
 4. If yes → delete the file
 
