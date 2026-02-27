@@ -477,4 +477,17 @@ export const telegramPlugin: ChannelPlugin<ResolvedTelegramAccount, TelegramProb
       return { cleared, envToken: Boolean(envToken), loggedOut };
     },
   },
+  gateway: {
+    startAccount: async (ctx) => {
+      const account = ctx.account;
+      ctx.log?.info(`[${account.accountId}] starting Telegram provider`);
+      return getTelegramRuntime().channel.telegram.monitorTelegramProvider({
+        token: account.token,
+        accountId: account.accountId,
+        config: ctx.cfg,
+        runtime: ctx.runtime,
+        abortSignal: ctx.abortSignal,
+      });
+    },
+  },
 };
