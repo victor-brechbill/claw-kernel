@@ -55,9 +55,28 @@ echo ""
 echo "📦 Installing globally..."
 npm install -g .
 
+# Get npm global bin directory
+NPM_BIN=$(npm bin -g 2>/dev/null || echo "$HOME/.npm-global/bin")
+
 echo ""
 echo "✅ Claw Kernel installed successfully!"
 echo ""
+
+# Check if openclaw command is available
+if ! command -v openclaw &> /dev/null; then
+    echo "⚠️  The 'openclaw' command is not in your PATH"
+    echo ""
+    echo "Add this line to your ~/.bashrc or ~/.zshrc:"
+    echo "  export PATH=\"$NPM_BIN:\$PATH\""
+    echo ""
+    echo "Then reload your shell:"
+    echo "  source ~/.bashrc  # (or ~/.zshrc)"
+    echo ""
+    echo "Or run this command now:"
+    echo "  export PATH=\"$NPM_BIN:\$PATH\""
+    echo ""
+fi
+
 echo "Next steps:"
 echo "  1. Run: openclaw onboard"
 echo "  2. Configure your channels and API keys"
