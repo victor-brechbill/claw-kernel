@@ -629,6 +629,14 @@ date
 - OpenClaw config (`~/.openclaw/openclaw.json`)
 - Any project databases (DailyStockPick MongoDB, etc.)
 
+**Prerequisites:**
+
+If you haven't already:
+
+1. Set up Google Workspace Business Starter (see [Prerequisites](../../README.md#3-google-workspace-account-recommended))
+2. Create a backup folder in your Google Drive
+3. Note your bot email (e.g., `bot@yourdomain.com`)
+
 **Implementation:**
 
 ```bash
@@ -637,21 +645,44 @@ sudo apt-get update && sudo apt-get install -y rclone
 
 # Configure Google Drive remote
 rclone config
-# Follow prompts:
-# - New remote → name it "nova-gdrive"
-# - Type: Google Drive
-# - OAuth flow will open browser
+```
+
+**Follow the rclone prompts:**
+
+```
+n) New remote
+name> nova-gdrive
+Storage> drive (Google Drive)
+client_id> (leave blank, press Enter)
+client_secret> (leave blank, press Enter)
+scope> 1 (Full access)
+service_account_file> (leave blank, press Enter)
+Edit advanced config? n
+Use web browser to automatically authenticate? Y
+
+# Browser will open for OAuth - sign in with your bot Google account
+# Grant permissions, then return to terminal
+
+Configure this as a Shared Drive (Team Drive)? n
+Keep this remote? y
 ```
 
 **Install backup script:**
 
 ```bash
+# Create scripts directory
+mkdir -p ~/clawd/scripts ~/clawd/logs
+
+# Download backup script
 curl -o ~/clawd/scripts/backup-to-gdrive.sh \
   https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/backup-to-gdrive.sh
 
 chmod +x ~/clawd/scripts/backup-to-gdrive.sh
 
-# Test backup
+# Edit the script to set your backup folder name (optional)
+# Default: "Nova-Backup" - change if you created a different folder name
+
+# Test backup (first run creates the backup folder)
 ~/clawd/scripts/backup-to-gdrive.sh
 ```
 
@@ -664,15 +695,28 @@ chmod +x ~/clawd/scripts/backup-to-gdrive.sh
 **Verify:**
 
 ```bash
-# Check backup exists
+# Check backup exists in Google Drive
 rclone ls nova-gdrive:Nova-Backup/
 
-# Check cron job
+# You should see folders: workspace/, config/, databases/ (if applicable)
+
+# Check cron job is scheduled
 crontab -l | grep backup-to-gdrive
+
+# Check backup log
+tail ~/clawd/logs/gdrive-backup.log
 ```
 
-- [ ] Google Drive configured and backup script tested
+**Troubleshooting:**
+
+- **"Remote not found"**: Run `rclone config` again, make sure you named it `nova-gdrive`
+- **OAuth errors**: Re-run `rclone config`, delete old remote, recreate with correct Google account
+- **Backup folder not created**: Check script has execute permissions (`chmod +x`)
+
+- [ ] rclone configured with Google Drive OAuth
+- [ ] Backup script tested successfully
 - [ ] Daily backup cron job installed
+- [ ] Verified backup appears in Google Drive
 
 ---
 
