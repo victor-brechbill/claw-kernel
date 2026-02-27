@@ -1,653 +1,452 @@
 ---
 title: "SETUP.md Template"
-summary: "Post-onboarding infrastructure checklist"
+summary: "Interactive post-onboarding infrastructure wizard"
 read_when:
   - Setting up production infrastructure after onboarding
 ---
 
-# SETUP.md - Production Infrastructure Checklist
+# SETUP.md - Production Infrastructure Setup
 
-_Onboarding complete. Now let's build out your production environment._
-
----
-
-## 🤖 Instructions for the Bot
-
-**On first user message after onboard:**
-
-1. Immediately offer to work through this setup checklist together
-2. Explain this covers critical infrastructure (OAuth refresh, backups, security, etc.)
-3. Start working through sections below in order
-
-**During setup:**
-
-- If the user wants to do something else → **that's fine, help them**
-- After handling their request → **return to the setup checklist**
-- Say something like: "Done! Now let's get back to the setup checklist. We were on: [section name]"
-- Keep returning until all checkboxes are complete
-
-**Completion:**
-
-- When ALL checkboxes below are checked ✅
-- Confirm with user: "Setup complete! Should I delete SETUP.md now?"
-- If yes → delete this file
-- The user won't need it again (infrastructure is built)
-
-**Tracking progress:** Check each box as you complete sections together. The user can see progress.
+_Onboarding complete! Now let's build out your production environment together._
 
 ---
 
-## Repository Architecture
+## 🤖 Bot Instructions - INTERACTIVE WIZARD MODE
 
-Before you begin, understand how claw-kernel and claw-interface work together:
+**THIS IS A WIZARD, NOT A CHECKLIST.**
 
-### claw-kernel (Your OpenClaw Runtime)
+### On First User Message
 
-**What it is:** The OpenClaw runtime — the code that runs your agent.
+1. **Greet the user warmly** - they just completed onboard!
+2. **Summarize what this setup wizard will do:**
+   - OAuth token refresh (prevents 24h agent death)
+   - Automated backups (protects your data)
+   - Security hardening (SSH, firewall, updates)
+   - Monitoring & health checks
+3. **Explain the format:**
+   - "I'll walk you through each step one at a time"
+   - "For each step, I'll explain what it is, why it matters, and either set it up for you or guide you through it"
+   - "We can take breaks - just let me know and we'll pick up where we left off"
+4. **Ask:** "Ready to start with Step 1: OAuth Token Refresh?"
 
-**What you should do:**
+### During Setup - Step-by-Step Process
 
-- Install via npm: `npm install -g @claw/claw-kernel`
-- Monitor for updates: Watch the GitHub repo, pull updates regularly
-- Contribute bugfixes: Submit PRs for bugs you find
-- Fork only if adding major features — otherwise, stay on upstream
+**For EACH step below:**
 
-**Updating:**
+1. **Explain what this step is** (in plain English)
+2. **Explain why it matters** (what breaks without it)
+3. **Check if already done** (don't repeat completed work)
+4. **Execute or guide:**
+   - If I can do it myself → ask permission, then do it
+   - If user needs to do something → guide them through exact commands
+   - If external service needed → explain how to set it up
+5. **Verify it worked** (test the thing we just set up)
+6. **Mark complete** (check the box below)
+7. **Ask:** "Done! Ready for Step [N+1]: [next step name]?"
 
-```bash
-npm update -g @claw/claw-kernel
-```
+### Handling Interruptions
 
-### claw-interface (Your Dashboard)
+- User wants to do something else? **That's fine!**
+- Help them with whatever they need
+- When done, say: "Great! Now let's get back to the setup wizard. We were on Step [N]: [step name]"
+- **Keep returning** until all steps are complete
 
-**What it is:** The web dashboard for managing your agent, kanban board, system monitoring.
+### Completion
 
-**What you should do:**
+- When ALL steps are ✅
+- Say: "🎉 Setup complete! Your production infrastructure is ready."
+- Ask: "Should I delete this SETUP.md file? You won't need it anymore."
+- If yes → delete the file
 
-- Fork immediately: `git clone https://github.com/YOUR-USERNAME/claw-interface.git`
-- Customize freely: This is YOUR dashboard — change colors, add pages, modify layouts
-- Stay generic: Don't add hardcoded personal data (keep it configurable)
-- Pull upstream updates periodically if you want new features
+### Progress Tracking
 
-### Summary
-
-| Repo               | Install Method | Customization Strategy                         |
-| ------------------ | -------------- | ---------------------------------------------- |
-| **claw-kernel**    | npm install    | Stay on upstream, fork only for major features |
-| **claw-interface** | Fork & clone   | Fork immediately, customize freely             |
+- Check boxes as you complete steps
+- User can see progress at any time
+- If user asks "where are we?" → show current step number and uncompleted steps
 
 ---
 
-## Authentication & Token Management
+## Setup Steps
 
-- [ ] **Set up OAuth token refresh** — Prevent agent death after 24h
+### ✅ Step 1: OAuth Token Refresh
 
-**Why this is critical:** Claude Code's OAuth token expires after ~24 hours. Without automatic refresh, your agent stops working silently.
+**What this is:** Automatic refresh of Claude Code OAuth tokens every 6 hours
 
-**Note:** Tokens are automatically synced to OpenClaw during `openclaw onboard`. This cron job keeps them refreshed after expiry.
+**Why it matters:** OAuth tokens expire after ~24 hours. Without refresh, your agent silently stops working.
 
-**Install refresh scripts:**
+**Implementation:**
 
 ```bash
-# Copy scripts from claw-kernel repo
-mkdir -p ~/scripts ~/logs
-cp ~/claw-kernel/scripts/refresh-claude-token.sh ~/scripts/
-cp ~/claw-kernel/scripts/sync-oauth-tokens.sh ~/scripts/
-chmod +x ~/scripts/refresh-claude-token.sh ~/scripts/sync-oauth-tokens.sh
+# Create directories
+mkdir -p ~/clawd/scripts ~/clawd/logs
+
+# Install refresh scripts
+curl -o ~/clawd/scripts/refresh-claude-token.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/refresh-claude-token.sh
+
+curl -o ~/clawd/scripts/sync-oauth-tokens.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/sync-oauth-tokens.sh
+
+chmod +x ~/clawd/scripts/refresh-claude-token.sh ~/clawd/scripts/sync-oauth-tokens.sh
+
+# Add cron job (runs every 6 hours)
+(crontab -l 2>/dev/null; echo "0 */6 * * * ~/clawd/scripts/refresh-claude-token.sh >> ~/clawd/logs/token-refresh.log 2>&1 && ~/clawd/scripts/sync-oauth-tokens.sh >> ~/clawd/logs/token-refresh.log 2>&1") | crontab -
 ```
 
-**Set up cron job (refreshes every 6 hours):**
+**Verify:**
 
 ```bash
-crontab -e
-
-# Add this line (replace YOUR-USERNAME with your actual username):
-0 */6 * * * /home/YOUR-USERNAME/scripts/refresh-claude-token.sh >> /home/YOUR-USERNAME/logs/token-refresh.log 2>&1
-```
-
-**How it works:**
-
-- `refresh-claude-token.sh` refreshes the OAuth token in `~/.claude/.credentials.json`
-- Then automatically calls `sync-oauth-tokens.sh` to sync tokens to all OpenClaw agent directories
-
-**Verification:**
-
-```bash
-# Check token expiry
-python3 -c "import json, datetime; c=json.load(open('$HOME/.claude/.credentials.json')); print('Expires:', datetime.datetime.fromtimestamp(c['claudeAiOauth']['expiresAt']/1000))"
-
-# Verify cron entry exists
+# Check cron job installed
 crontab -l | grep refresh-claude-token
 
-# Check recent refresh logs
-tail -20 ~/logs/token-refresh.log
+# Check tokens are valid
+cat ~/.claude/.credentials.json | jq '.claudeAiOauth.expiresAt'
 ```
 
-**Without this cron job, your agent will stop responding after ~24 hours when the OAuth token expires.**
+- [ ] OAuth token refresh cron job installed and verified
 
 ---
 
-## Dashboard
+### ✅ Step 2: Automated Backups
 
-- [ ] **Install claw-interface (Dashboard)** — Set up the web dashboard for managing agents, tasks, and monitoring.
+**What this is:** Daily backups of your workspace, config, and databases to Google Drive
 
-```bash
-# Clone the dashboard repository
-cd ~/
-git clone https://github.com/YOUR-USERNAME/claw-interface.git
-cd claw-interface
+**Why it matters:** Hardware fails. Accidental deletions happen. Backups prevent data loss.
 
-# Install dependencies
-npm install
+**What gets backed up:**
 
-# Build for production
-npm run build
+- Your workspace (`~/clawd/`)
+- OpenClaw config (`~/.openclaw/openclaw.json`)
+- Any project databases (DailyStockPick MongoDB, etc.)
 
-# Deploy (configure your deployment method)
-npm run deploy
-```
-
-**Verification:**
-
-- Dashboard accessible at your configured URL
-- Can view agent status and task queue
-- Real-time updates working
-
-**Reference:** See claw-interface README for deployment options (Vercel, self-hosted, etc.)
-
-## Security Hardening
-
-- [ ] **Harden SSH access** — Disable password auth, use keys only
+**Implementation:**
 
 ```bash
-# Edit SSH config
-sudo nano /etc/ssh/sshd_config
+# Install rclone (Google Drive sync tool)
+sudo apt-get update && sudo apt-get install -y rclone
 
-# Set these values:
-# PasswordAuthentication no
-# PubkeyAuthentication yes
-# PermitRootLogin no
-
-# Restart SSH
-sudo systemctl restart sshd
-```
-
-**Verification:** Try password login from another machine — it should fail.
-
-- [ ] **Install fail2ban** — Auto-ban brute force attempts
-
-```bash
-sudo apt-get install -y fail2ban
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
-```
-
-- [ ] **Confirm closed ports (Security)** — Harden your server by closing unnecessary ports. Only essential services should be accessible.
-
-```bash
-# Check firewall status
-sudo ufw status
-
-# Expected: Only essential ports open (22 for SSH, 443 for HTTPS, etc.)
-# Close any unnecessary ports
-sudo ufw deny PORT_NUMBER
-```
-
-**Expected output:**
-
-```
-Status: active
-To                         Action      From
---                         ------      ----
-22/tcp                     ALLOW       Anywhere
-443/tcp                    ALLOW       Anywhere
-```
-
-**Verification:** Run `nmap localhost` - should show minimal open ports
-
-- [ ] **Install gitleaks** — Secret scanning for repositories
-
-```bash
-# Install gitleaks
-wget https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.21.2_linux_x64.tar.gz
-tar -xzf gitleaks_8.21.2_linux_x64.tar.gz
-sudo mv gitleaks /usr/local/bin/
-rm gitleaks_8.21.2_linux_x64.tar.gz
-
-# Verify
-gitleaks version
-```
-
-- [ ] **Set up pre-commit hooks** — Prevent secret commits
-
-```bash
-# In each project repo
-cd ~/your-project
-cp /path/to/claw-kernel/scripts/setup-precommit.sh .
-chmod +x setup-precommit.sh
-./setup-precommit.sh
-```
-
-**Verification:**
-
-```bash
-# Test gitleaks
-cd ~/your-project
-gitleaks detect
-
-# Test pre-commit hook (should block the commit)
-echo "PASSWORD=secret123" > test-secret.txt
-git add test-secret.txt
-git commit -m "test"  # Should fail with gitleaks error
-rm test-secret.txt
-```
-
-- [ ] **Configure Cloudflare Zero Trust** — Set up Cloudflare tunnel for secure access without exposing ports.
-
-```bash
-# Install cloudflared
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-sudo mv cloudflared /usr/local/bin/
-sudo chmod +x /usr/local/bin/cloudflared
-
-# Authenticate
-cloudflared tunnel login
-
-# Create tunnel
-cloudflared tunnel create YOUR-TUNNEL-NAME
-
-# Configure tunnel
-# Edit ~/.cloudflared/config.yml with your tunnel settings
-```
-
-**Setup steps:**
-
-1. Create Cloudflare tunnel
-2. Configure DNS records
-3. Set up Access policies for authentication
-4. Test tunnel connectivity
-
-**Reference:** https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/
-
-## Backup System
-
-- [ ] **Set up Google Drive backup sync** — Protect against data loss
-
-**Install rclone:**
-
-```bash
-curl https://rclone.org/install.sh | sudo bash
-```
-
-**Configure Google Drive:**
-
-```bash
-# Interactive setup
+# Configure Google Drive remote
 rclone config
-
-# Create remote named "gdrive"
-# Select: Google Drive
-# Follow OAuth flow
+# Follow prompts:
+# - New remote → name it "nova-gdrive"
+# - Type: Google Drive
+# - OAuth flow will open browser
 ```
 
 **Install backup script:**
 
 ```bash
-cp /path/to/claw-kernel/scripts/backup-to-gdrive.sh ~/scripts/
-chmod +x ~/scripts/backup-to-gdrive.sh
+curl -o ~/clawd/scripts/backup-to-gdrive.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/backup-to-gdrive.sh
+
+chmod +x ~/clawd/scripts/backup-to-gdrive.sh
 
 # Test backup
-~/scripts/backup-to-gdrive.sh
+~/clawd/scripts/backup-to-gdrive.sh
 ```
 
-**Schedule daily backups:**
+**Schedule daily backups (4:00 AM local time):**
 
 ```bash
-crontab -e
-
-# Daily backup at 4am
-0 4 * * * /home/YOUR-USERNAME/scripts/backup-to-gdrive.sh >> /home/YOUR-USERNAME/logs/backup.log 2>&1
+(crontab -l 2>/dev/null; echo "0 4 * * * ~/clawd/scripts/backup-to-gdrive.sh >> ~/clawd/logs/gdrive-backup.log 2>&1") | crontab -
 ```
 
-**What gets backed up:**
-
-- Workspace files (MEMORY.md, daily logs, config)
-- OpenClaw config (`~/.openclaw/`)
-- Skills and agent configurations
-
-**Verification:**
+**Verify:**
 
 ```bash
-# Check GDrive folder
-rclone ls gdrive:OpenClaw-Backup/
+# Check backup exists
+rclone ls nova-gdrive:Nova-Backup/
 
-# Check backup log
-tail ~/logs/backup.log
+# Check cron job
+crontab -l | grep backup-to-gdrive
 ```
 
-**Recovery:** See `docs/recovery.md` for restore procedures.
-
-## Resource Management
-
-- [ ] **Set up RAM limits on systemd** — Prevent memory exhaustion by setting resource limits on the OpenClaw service.
-
-```bash
-# Edit systemd service file
-sudo systemctl edit openclaw.service
-
-# Add these lines in the override file:
-[Service]
-MemoryMax=4G
-MemoryHigh=3.5G
-```
-
-**Restart service:**
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart openclaw.service
-```
-
-**Verification:**
-
-```bash
-systemctl show openclaw.service | grep Memory
-# Should show MemoryMax=4294967296 (4G) and MemoryHigh=3758096384 (3.5G)
-```
-
-- [ ] **Set up disk size warnings** — Monitor disk usage and get alerts before running out of space.
-
-```bash
-# Create monitoring script
-cat > ~/check-disk-space.sh << 'EOF'
-#!/bin/bash
-THRESHOLD=80
-USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
-if [ "$USAGE" -gt "$THRESHOLD" ]; then
-    echo "WARNING: Disk usage is at ${USAGE}%"
-    # Add notification command here (e.g., telegram alert)
-fi
-EOF
-
-chmod +x ~/check-disk-space.sh
-
-# Add to crontab (runs daily at 9am)
-(crontab -l 2>/dev/null; echo "0 9 * * * ~/check-disk-space.sh") | crontab -
-```
-
-**Verification:**
-
-```bash
-# Test the script
-~/check-disk-space.sh
-
-# Verify cron entry
-crontab -l | grep check-disk-space
-```
-
-## Monitoring & Health Checks
-
-- [ ] **Set up gateway watchdog** — Auto-restart on deadlock
-
-**Install watchdog script:**
-
-```bash
-cp /path/to/claw-kernel/scripts/gateway-watchdog.sh ~/scripts/
-chmod +x ~/scripts/gateway-watchdog.sh
-```
-
-**Schedule watchdog (every 5 minutes):**
-
-```bash
-crontab -e
-
-# Check every 5 minutes
-*/5 * * * * /home/YOUR-USERNAME/scripts/gateway-watchdog.sh >> /home/YOUR-USERNAME/logs/watchdog.log 2>&1
-```
-
-**What it does:**
-
-- Checks the gateway health endpoint with a 30-second timeout
-- Restarts the service automatically if unresponsive
-- Logs all actions for debugging
-
-**Verification:**
-
-```bash
-# Test watchdog
-~/scripts/gateway-watchdog.sh
-
-# Check watchdog log
-tail ~/logs/watchdog.log
-```
-
-## Automation
-
-- [ ] **Schedule cron jobs** — Set up both system-level and OpenClaw cron jobs for automated maintenance.
-
-**Complete cron setup (combines all scripts from above):**
-
-```bash
-crontab -e
-
-# === Token Management ===
-# Refresh OAuth tokens every 6 hours
-0 */6 * * * /home/YOUR-USERNAME/scripts/refresh-claude-token.sh >> /home/YOUR-USERNAME/logs/token-refresh.log 2>&1
-
-# === Backup ===
-# Daily backup at 4am
-0 4 * * * /home/YOUR-USERNAME/scripts/backup-to-gdrive.sh >> /home/YOUR-USERNAME/logs/backup.log 2>&1
-
-# === Monitoring ===
-# Gateway watchdog every 5 minutes
-*/5 * * * * /home/YOUR-USERNAME/scripts/gateway-watchdog.sh >> /home/YOUR-USERNAME/logs/watchdog.log 2>&1
-
-# Disk space check daily at 9am
-0 9 * * * /home/YOUR-USERNAME/check-disk-space.sh >> /home/YOUR-USERNAME/logs/disk-check.log 2>&1
-```
-
-**OpenClaw Cron Jobs** (agent behaviors):
-Configure in OpenClaw's HEARTBEAT.md:
-
-- **Maintenance:** Daily system checks, log rotation, cleanup
-- **Self-improvement:** Weekly code analysis, refactoring suggestions
-- **Morning brief:** Daily summary of tasks, reminders, and updates
-
-**Verification:**
-
-```bash
-# Verify all cron entries
-crontab -l
-```
-
-- [ ] **Set up daily brief** — Configure the morning brief with your preferences.
-
-**Configure in HEARTBEAT.md or USER.md:**
-
-```markdown
-## Daily Brief Configuration
-
-- Time: 8:00 AM YOUR-TIMEZONE
-- Include:
-  - Weather forecast
-  - Task summary (overdue, due today, upcoming)
-  - Calendar events
-  - Important notifications from previous day
-  - Quick stats (system health, recent completions)
-```
-
-**Verification:** Wait for next scheduled brief, or trigger manually to test
-
-## External Services
-
-- [ ] **Set up GitHub for bot** — Create a dedicated GitHub account for the bot and configure access.
-
-**Steps:**
-
-1. Create new GitHub account (e.g., YOUR-BOT-NAME)
-2. Generate Personal Access Token (PAT):
-   - Go to Settings > Developer settings > Personal access tokens
-   - Create token with `repo` scope
-3. Store token securely in Bitwarden (see next step)
-4. Add token to OpenClaw configuration:
-   ```bash
-   # Store in secure location
-   echo "YOUR-GITHUB-PAT" > ~/.config/openclaw/github-token
-   chmod 600 ~/.config/openclaw/github-token
-   ```
-
-**Verification:**
-
-```bash
-# Test token
-curl -H "Authorization: token $(cat ~/.config/openclaw/github-token)" \
-  https://api.github.com/user
-```
-
-- [ ] **Set up Bitwarden + password skill** — Install Bitwarden CLI for secure credential management.
-
-```bash
-# Install Bitwarden CLI
-npm install -g @bitwarden/cli
-
-# Login
-bw login YOUR-EMAIL
-
-# Unlock vault (do this in each terminal session)
-export BW_SESSION=$(bw unlock --raw)
-
-# Test retrieval
-bw get item "GitHub PAT" --session $BW_SESSION
-```
-
-**Set up encryption:**
-
-```bash
-# Create encryption key for OpenClaw
-openssl rand -base64 32 > ~/.config/openclaw/encryption-key
-chmod 600 ~/.config/openclaw/encryption-key
-```
-
-**Configure password skill:**
-
-- Add Bitwarden vault ID to OpenClaw config
-- Test credential retrieval through OpenClaw commands
-- Ensure auto-lock is configured (e.g., 1 hour timeout)
-
-**Reference:** https://bitwarden.com/help/cli/
-
-## Understanding the Coding Workflow
-
-- [ ] **Read and understand the coding workflow** — How your agent develops code autonomously
-
-OpenClaw's coding workflow uses **orchestration** — you don't write code directly, you spawn specialized developer agents that use Claude Code.
-
-**The Flow:**
-
-1. **PRD Creation** — Define what needs to be built (Product Requirements Document)
-2. **Developer Agent** — Spawns in isolated session, uses Claude Code to implement
-3. **Code Review Agent** — Reviews the PR, checks tests, validates requirements
-4. **Merge** — Main agent approves and merges after review passes
-
-**Files involved:**
-
-- `skills/coding/SKILL.md` — Your orchestration manual (read this!)
-- `.agents/developer/AGENTS.md` — Developer agent's instructions
-- `.agents/code-reviewer/AGENTS.md` — Reviewer agent's instructions
-- `HEARTBEAT.md` — Kanban workflow checklist
-
-**Key concepts:**
-
-- **Kanban board** — Cards move through: backlog > in_progress > review > done
-- **PRDs** — Every significant task needs a PRD before work begins
-- **Definition of Done** — PR created, tests pass, review passes, then merge
-- **Quality over speed** — Always implement reviewer suggestions
-
-**Getting started:**
-
-1. Read `docs/skills/coding.md` for the full guide
-2. Create a test card on your kanban board
-3. Write a simple PRD
-4. Spawn a developer agent and watch the flow
-5. Review the PR, merge it
-
-## Memory System
-
-- [ ] **Understand the memory system** — How your agent remembers across sessions
-
-**Two types of memory:**
-
-1. **Short-term (Daily Logs)** — `memory/YYYY-MM-DD.md`
-   - Raw notes from each day
-   - Session context, decisions, events
-   - Automatically created by your agent
-   - Kept for reference, reviewed periodically
-
-2. **Long-term (Curated Memory)** — `MEMORY.md`
-   - Distilled insights, lessons learned, important context
-   - Updated by your agent (you review and curate)
-   - Loaded every session (this is your persistent memory)
-   - Think of it like a human's long-term memory
-
-**How it works:**
-
-- Your agent wakes up fresh each session (no memory of previous sessions)
-- First action: Read `MEMORY.md` + recent daily logs
-- As session progresses: Write to today's daily log
-- Periodically: Review daily logs, update `MEMORY.md` with important insights
-
-**Files:**
-
-- `MEMORY.md` — Your curated long-term memory
-- `memory/YYYY-MM-DD.md` — Daily raw logs (auto-created)
-- `AGENTS.md` — Instructions include "Read MEMORY.md every session"
-
-**Why this matters:**
-
-- Memory = continuity across sessions
-- Without MEMORY.md, your agent starts from zero every time
-- With MEMORY.md, your agent learns and improves over time
-
-**No setup required** — The system is already in place. Just understand how it works.
-
-## Testing
-
-- [ ] **Test interface + workflow** — Verify the complete workflow end-to-end.
-
-**Test checklist:**
-
-1. **Access dashboard**
-   - Open claw-interface URL
-   - Verify authentication works
-   - Check agent status is visible
-
-2. **Create a test card**
-   - Use dashboard or CLI to create a simple task card
-   - Verify card appears in task queue
-
-3. **Spawn an agent**
-   - Create a test card that triggers developer agent
-   - Monitor agent activity in dashboard
-   - Verify agent completes task successfully
-
-4. **Test PR workflow**
-   - Agent should create feature branch
-   - Make changes and commit
-   - Create PR automatically
-   - Verify PR appears in GitHub
-
-5. **Test notifications**
-   - Verify you receive completion notification
-   - Check error alerts are working
-
-**Success criteria:**
-
-- Dashboard shows real-time agent status
-- Can create and track tasks through web interface
-- Agents can autonomously complete coding tasks
-- PRs are created and linked to task cards
-- Notifications arrive as expected
+- [ ] Google Drive configured and backup script tested
+- [ ] Daily backup cron job installed
 
 ---
 
-_When every box is checked, this file disappears. You're fully operational._
+### ✅ Step 3: Security Hardening
+
+**What this is:** SSH hardening, firewall, automatic updates, fail2ban
+
+**Why it matters:** Your agent has access to APIs, databases, and sensitive data. Secure the host.
+
+**What we'll do:**
+
+1. Disable SSH password auth (key-only)
+2. Enable UFW firewall
+3. Install fail2ban (blocks brute-force attempts)
+4. Enable automatic security updates
+
+**Implementation:**
+
+```bash
+# Download security script
+curl -o ~/clawd/scripts/security-hardening.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/security-hardening.sh
+
+chmod +x ~/clawd/scripts/security-hardening.sh
+
+# Run security hardening
+~/clawd/scripts/security-hardening.sh
+```
+
+**Verify:**
+
+```bash
+# Check firewall status
+sudo ufw status
+
+# Check fail2ban is running
+sudo systemctl status fail2ban
+
+# Check SSH config
+grep "PasswordAuthentication no" /etc/ssh/sshd_config
+```
+
+- [ ] Security hardening complete and verified
+
+---
+
+### ✅ Step 4: Gateway Health Monitoring
+
+**What this is:** Watchdog script that detects gateway deadlocks and auto-restarts
+
+**Why it matters:** Gateway can freeze (event loop deadlock). Watchdog recovers automatically.
+
+**Implementation:**
+
+```bash
+# Install healthcheck script
+curl -o ~/clawd/scripts/healthcheck-gateway.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/healthcheck-gateway.sh
+
+chmod +x ~/clawd/scripts/healthcheck-gateway.sh
+
+# Add to cron (runs every 5 minutes)
+(crontab -l 2>/dev/null; echo "*/5 * * * * ~/clawd/scripts/healthcheck-gateway.sh >> ~/clawd/logs/gateway-health.log 2>&1") | crontab -
+```
+
+**Verify:**
+
+```bash
+# Test healthcheck
+~/clawd/scripts/healthcheck-gateway.sh
+
+# Check cron job
+crontab -l | grep healthcheck-gateway
+```
+
+- [ ] Gateway health monitoring cron job installed
+
+---
+
+### ✅ Step 5: Pre-commit Hooks (Optional)
+
+**What this is:** Git hooks that prevent committing secrets (gitleaks), run linters, format code
+
+**Why it matters:** Accidentally committing API keys is a common security breach
+
+**Implementation:**
+
+```bash
+# Install gitleaks
+cd /tmp
+wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+tar -xzf gitleaks_8.18.0_linux_x64.tar.gz
+sudo mv gitleaks /usr/local/bin/
+gitleaks version
+
+# Install pre-commit in your repos
+cd ~/clawd/vault/dev/repos/your-repo
+curl -o .pre-commit-config.yaml \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/.pre-commit-config.yaml
+
+# Install pre-commit tool
+pip install pre-commit
+pre-commit install
+```
+
+**Verify:**
+
+```bash
+# Test pre-commit hooks
+cd ~/clawd/vault/dev/repos/your-repo
+pre-commit run --all-files
+```
+
+- [ ] Pre-commit hooks installed (optional - skip if not using git workflows)
+
+---
+
+### ✅ Step 6: Dashboard Setup (Optional)
+
+**What this is:** Web dashboard for kanban board, system monitoring, Tommy/Stocks pages
+
+**Why it matters:** Nice UI for managing your agent, tracking tasks, viewing metrics
+
+**Implementation:**
+
+```bash
+# Fork claw-interface
+# Go to https://github.com/victor-brechbill/claw-interface
+# Click "Fork" button
+
+# Clone your fork
+cd ~/clawd/vault/dev/repos/
+git clone https://github.com/YOUR-USERNAME/claw-interface.git dashboard
+
+# Install dependencies
+cd dashboard
+npm install
+
+# Configure
+cp .env.example .env
+# Edit .env with your settings
+
+# Build and start
+npm run build
+./deploy.sh
+```
+
+**Verify:**
+
+```bash
+# Check dashboard is running
+curl http://localhost:3080/api/cards
+```
+
+- [ ] Dashboard forked, deployed, and running (optional)
+
+---
+
+### ✅ Step 7: System Maintenance Cron
+
+**What this is:** Daily maintenance job (OS updates, cleanup, health checks)
+
+**Why it matters:** Keeps system healthy, prevents disk space issues, applies security patches
+
+**Implementation:**
+
+This is typically set up via OpenClaw's built-in cron system rather than system cron.
+
+**Via OpenClaw:**
+
+```javascript
+// Daily at 5am local time
+{
+  "name": "Daily System Maintenance",
+  "schedule": { "kind": "cron", "expr": "0 5 * * *" },
+  "payload": {
+    "kind": "systemEvent",
+    "text": "Run daily system maintenance: OS updates, cleanup, security audit, backup verification, cron health check"
+  },
+  "delivery": { "mode": "announce" },
+  "sessionTarget": "main",
+  "enabled": true
+}
+```
+
+**Verify:**
+
+```bash
+# Check OpenClaw cron jobs
+# (The bot can do this via cron tool)
+```
+
+- [ ] Daily system maintenance cron job configured
+
+---
+
+### ✅ Step 8: Memory System
+
+**What this is:** Daily memory logs + long-term curated MEMORY.md
+
+**Why it matters:** Your agent wakes up fresh each session. Memory files provide continuity.
+
+**Implementation:**
+
+```bash
+# Create memory directory
+mkdir -p ~/clawd/memory
+
+# Memory files are auto-created by the agent
+# Daily: ~/clawd/memory/YYYY-MM-DD.md (raw logs)
+# Long-term: ~/clawd/MEMORY.md (curated insights)
+```
+
+**The bot will:**
+
+- Write to `memory/YYYY-MM-DD.md` during sessions
+- Periodically review daily logs and update `MEMORY.md`
+- Load `MEMORY.md` at session start for context
+
+**Verify:**
+
+```bash
+# Check memory directory exists
+ls ~/clawd/memory/
+```
+
+- [ ] Memory directory created and system explained
+
+---
+
+### ✅ Step 9: Documentation Review
+
+**What this is:** Quick review of key docs to know where to find help
+
+**Key docs:**
+
+- **AGENTS.md** - Operating manual, workspace structure, skills
+- **SOUL.md** - Agent personality and voice
+- **USER.md** - Information about you
+- **TOOLS.md** - Local notes (API keys, camera names, etc.)
+- **HEARTBEAT.md** - Periodic check checklist
+
+**Verify:**
+
+```bash
+# Check docs exist
+ls ~/clawd/AGENTS.md ~/clawd/SOUL.md ~/clawd/USER.md ~/clawd/TOOLS.md ~/clawd/HEARTBEAT.md
+```
+
+- [ ] Reviewed documentation structure
+
+---
+
+## ✅ Setup Complete!
+
+When all boxes above are checked:
+
+1. Congratulate the user 🎉
+2. Summarize what's now in place:
+   - OAuth tokens refresh automatically
+   - Daily backups to Google Drive
+   - Security hardened (firewall, SSH, fail2ban)
+   - Gateway health monitoring
+   - System maintenance scheduled
+3. Ask: "Should I delete this SETUP.md file? You won't need it anymore."
+4. If yes → delete the file
+
+---
+
+## Quick Reference (For the Bot)
+
+**Checking progress:**
+
+```bash
+# Count completed steps
+grep -c "^\- \[x\]" ~/clawd/SETUP.md
+
+# List remaining steps
+grep "^\- \[ \]" ~/clawd/SETUP.md
+```
+
+**When returning after interruption:**
+
+```bash
+# Find first incomplete step
+grep -n "^\- \[ \]" ~/clawd/SETUP.md | head -1
+```
