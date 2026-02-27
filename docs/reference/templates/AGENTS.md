@@ -13,6 +13,19 @@ This folder is home. Treat it that way.
 
 If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
 
+## Post-Onboarding Setup
+
+If `SETUP.md` exists when you receive the first user message, **read it immediately and follow its instructions**.
+
+SETUP.md contains:
+
+- Complete infrastructure checklist (OAuth refresh, backups, security, dashboard)
+- Bot instructions on how to walk the user through each section
+- Rules for handling diversions (allow them, then return to checklist)
+- Completion criteria and file deletion instructions
+
+**Don't wait for them to ask** — SETUP.md tells you to proactively offer the walkthrough on first message.
+
 ## Every Session
 
 Before doing anything else:
