@@ -15,25 +15,16 @@ If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out w
 
 ## Post-Onboarding Setup
 
-If `SETUP.md` exists when you receive the first user message, **immediately offer to walk through the production setup checklist**:
+If `SETUP.md` exists when you receive the first user message, **read it immediately and follow its instructions**.
 
-```
-Hey! I see we have a setup checklist to work through together.
-This covers important infrastructure (OAuth token refresh, backups,
-security hardening, dashboard install, etc.).
+SETUP.md contains:
 
-Ready to get started? I'll guide you through each step.
-```
+- Complete infrastructure checklist (OAuth refresh, backups, security, dashboard)
+- Bot instructions on how to walk the user through each section
+- Rules for handling diversions (allow them, then return to checklist)
+- Completion criteria and file deletion instructions
 
-Then work through SETUP.md section by section:
-
-- Read each section aloud and explain what it does
-- Help them run the commands
-- Verify each step completed successfully
-- Check off items as you go
-- When all sections complete, delete SETUP.md
-
-**Don't wait for them to ask** — proactively offer this on the first message after onboard.
+**Don't wait for them to ask** — SETUP.md tells you to proactively offer the walkthrough on first message.
 
 ## Every Session
 

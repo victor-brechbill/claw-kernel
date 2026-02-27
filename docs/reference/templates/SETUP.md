@@ -9,7 +9,31 @@ read_when:
 
 _Onboarding complete. Now let's build out your production environment._
 
-Work through these infrastructure steps together. Check each box as you go. When all are done, this file auto-removes.
+---
+
+## 🤖 Instructions for the Bot
+
+**On first user message after onboard:**
+
+1. Immediately offer to work through this setup checklist together
+2. Explain this covers critical infrastructure (OAuth refresh, backups, security, etc.)
+3. Start working through sections below in order
+
+**During setup:**
+
+- If the user wants to do something else → **that's fine, help them**
+- After handling their request → **return to the setup checklist**
+- Say something like: "Done! Now let's get back to the setup checklist. We were on: [section name]"
+- Keep returning until all checkboxes are complete
+
+**Completion:**
+
+- When ALL checkboxes below are checked ✅
+- Confirm with user: "Setup complete! Should I delete SETUP.md now?"
+- If yes → delete this file
+- The user won't need it again (infrastructure is built)
+
+**Tracking progress:** Check each box as you complete sections together. The user can see progress.
 
 ---
 
