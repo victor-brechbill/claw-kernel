@@ -1430,6 +1430,8 @@ These parts are optional and can be set up later:
 
 If you want public HTTPS access without opening firewall ports:
 
+**Step 1: Install and configure cloudflared**
+
 ```bash
 # Install cloudflared
 curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
@@ -1453,19 +1455,61 @@ ingress:
   - service: http_status:404
 EOF
 
-# Add bypass rules for static assets (prevent Zero Trust login page)
-# In Cloudflare dashboard → Zero Trust → Access → Applications → Create application
-# Name: Dashboard Static Assets
-# Application domain: dashboard.yourdomain.com
-# Path: Match regex: \.(js|css|json|png|jpg|svg|ico|woff|woff2|ttf|eot)$
-# Also add: Path equals /manifest.webmanifest
-# Policy: Allow everyone (bypass)
-
 # Install as service
 sudo cloudflared service install
 sudo systemctl enable cloudflared
 sudo systemctl start cloudflared
 ```
+
+**Step 2: Configure Zero Trust Access Applications**
+
+In Cloudflare dashboard, go to **Zero Trust → Access → Applications** and create TWO applications:
+
+**Application 1: Dashboard (Main Application)**
+
+- Click "Add an application" → "Self-hosted"
+- **Application name:** Dashboard
+- **Session Duration:** 24 hours (or your preference)
+- **Application domain:**
+  - Subdomain: `dashboard`
+  - Domain: `yourdomain.com`
+- Click "Next"
+- **Policy name:** Allow Me - Email
+- **Action:** Allow
+- **Configure rules:**
+  - Include: Emails ending in → `@yourdomain.com` (your email domain)
+  - OR Include: Email → `your-email@gmail.com` (your specific email)
+- Click "Next" → "Add application"
+
+**Application 2: PWA Bypass (Static Assets)**
+
+- Click "Add an application" → "Self-hosted"
+- **Application name:** Dashboard PWA Bypass
+- **Session Duration:** 24 hours
+- **Application domain:**
+  - Subdomain: `dashboard`
+  - Domain: `yourdomain.com`
+- **Path:**
+  - Add 5 path rules (click "Add path" for each):
+    1. Path equals `/manifest.webmanifest`
+    2. Path equals `/sw.js`
+    3. Path equals `/workbox-3f626378.js`
+    4. Path equals `/icon-192x192.png`
+    5. Path equals `/icon-512x512.png`
+- Click "Next"
+- **Policy name:** Bypass
+- **Action:** Bypass
+- **Configure rules:**
+  - Include: Everyone
+- Click "Next" → "Add application"
+
+**Why two applications?**
+
+- **Application 1** protects the dashboard behind your email login
+- **Application 2** allows PWA files (service worker, manifest, icons) to load WITHOUT authentication
+- Without the bypass, the PWA won't install because service workers can't authenticate
+
+**Important:** Application 2 must be created AFTER Application 1, and should appear ABOVE Application 1 in the application list (higher priority). If needed, drag to reorder.
 
 **Verify:**
 
