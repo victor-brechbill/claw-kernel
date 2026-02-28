@@ -42,9 +42,10 @@ _Onboarding complete! Now let's build out your production environment together._
 2. **Explain why it matters** (what breaks without it)
 3. **Check if already done** (don't repeat completed work)
 4. **Execute or guide:**
-   - If I can do it myself → ask permission, then do it
+   - If I can do it myself → explain what I'm going to do and why, then do it (don't ask permission)
    - If user needs to do something → guide them through exact commands
    - If external service needed → explain how to set it up
+   - **Key principle:** Don't ask "Do you want X?" - say "We're going to X. Here's why..."
 5. **Verify it worked** (test the thing we just set up)
 6. **Mark complete** (check the box below)
 7. **Ask:** "Done! Ready for Step [N+1]: [next step name]?"
@@ -1273,25 +1274,18 @@ python3 ~/clawd/skills/passwords/scripts/decrypt.py && echo "✓ Decrypt works"
 
 **Why it matters:** Your bot needs to clone repos, push commits, and create PRs. SSH keys are more secure than HTTPS passwords.
 
-**Implementation:**
+**Bot implementation:** I'll generate the SSH key for you automatically and show you the public key to add to GitHub.
 
-```bash
-# Generate SSH key for bot
-ssh-keygen -t ed25519 -C "bot@yourdomain.com" -f ~/.ssh/github-bot -N ""
+**What I'll do:**
 
-# Start SSH agent
-eval "$(ssh-agent -s)"
+1. Generate an ed25519 SSH key pair
+2. Add it to the SSH agent
+3. Configure SSH to use this key for GitHub
+4. Display the public key for you to add to GitHub
 
-# Add key to agent
-ssh-add ~/.ssh/github-bot
+**After I generate the key, you'll need to:**
 
-# Display public key (copy this)
-cat ~/.ssh/github-bot.pub
-```
-
-**Add to GitHub:**
-
-1. Copy the public key from above
+1. Copy the public key I show you
 2. Go to [github.com/settings/keys](https://github.com/settings/keys)
 3. Click "New SSH key"
 4. Title: "Bot on [your-server-name]"
@@ -1339,35 +1333,102 @@ cd /tmp && git clone git@github.com:torvalds/linux.git --depth 1 && rm -rf linux
 
 **Why it matters:** Visual interface for managing your bot's work, tracking tasks, and monitoring system health.
 
-**Architecture:**
+**Part 1: Clone claw-interface**
 
-- **Claw Interface** - Open source dashboard (you'll fork this)
-- **Cloudflare Tunnel** - Secure public access without opening firewall ports
-- **Subdomain** - Access via `dashboard.yourdomain.com`
-
-**Step 1: Fork claw-interface**
+We're going to clone the dashboard directly from the upstream repo (you don't need to fork it).
 
 ```bash
-# Clone your fork
 cd ~/clawd/vault/dev/repos/
-git clone git@github.com:YOUR-USERNAME/claw-interface.git
+git clone https://github.com/victor-brechbill/claw-interface.git
 cd claw-interface
-
-# Install dependencies
-npm install
-
-# Build production version
-npm run build
 ```
 
-**Step 2: Set up subdomain DNS**
+**Part 2: Install dependencies**
 
-1. Go to your domain registrar (Google Domains, Cloudflare, etc.)
-2. Add CNAME record:
-   - Name: `dashboard` (or `bot`, `nova`, etc.)
-   - Target: `your-tunnel-id.cfargotunnel.com` (you'll get this in next step)
+```bash
+npm install
+```
 
-**Step 3: Install Cloudflare Tunnel**
+**Part 3: Start MongoDB**
+
+The dashboard needs MongoDB for storing kanban cards and system data.
+
+```bash
+sudo systemctl enable mongodb
+sudo systemctl start mongodb
+sudo systemctl status mongodb
+```
+
+**Part 4: Customize dashboard**
+
+I'll automatically customize the dashboard with your settings (bot name, GitHub repos, domain). This updates config files and commits the changes to your local repo.
+
+**Bot will:**
+
+1. Update `frontend/src/config/index.ts` with your bot name
+2. Update `backend/config/repos.json` with your GitHub repositories
+3. Update `frontend/public/manifest.webmanifest` with your domain
+4. Commit these changes locally
+
+**Part 5: Build frontend**
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+**Part 6: Deploy dashboard**
+
+```bash
+./deploy.sh
+```
+
+This will:
+
+- Build and start the backend API (port 3080)
+- Install systemd services for auto-restart
+- Serve the frontend from the backend
+
+**Part 7: Verify local access**
+
+```bash
+# Check dashboard is running
+curl -sf http://localhost:3080/api/health && echo "✓ Dashboard running"
+
+# Check systemd services
+systemctl --user status claw-interface-backend
+systemctl --user status claw-interface-frontend
+```
+
+**Part 8: Test the dashboard**
+
+Open your browser and navigate to:
+
+- **Local:** `http://localhost:3080` (works from server)
+- **SSH tunnel:** `ssh -L 3080:localhost:3080 user@server` then open `http://localhost:3080` on your laptop
+
+You should see:
+
+- Kanban board (empty initially)
+- System page (shows server stats)
+- Agent management (your configured agents)
+
+**Part 9-14: (Optional) Future enhancements**
+
+These parts are optional and can be set up later:
+
+9. Set up reverse proxy (nginx) for custom domain
+10. Configure SSL/TLS certificates (Let's Encrypt)
+11. Set up firewall rules (allow 80/443, block 3080)
+12. Configure backups for MongoDB
+13. Set up monitoring/alerting
+14. Add custom branding/theme
+
+**Part 15: (Optional) Cloudflare Zero Trust tunnel**
+
+If you want public HTTPS access without opening firewall ports:
 
 ```bash
 # Install cloudflared
@@ -1375,13 +1436,11 @@ curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloud
 sudo mv cloudflared /usr/local/bin/
 sudo chmod +x /usr/local/bin/cloudflared
 
-# Authenticate with Cloudflare
+# Authenticate
 cloudflared tunnel login
-# Opens browser - sign in to your Cloudflare account
 
 # Create tunnel
 cloudflared tunnel create bot-dashboard
-# Note the tunnel ID shown
 
 # Configure tunnel
 cat > ~/.cloudflared/config.yml << EOF
@@ -1394,43 +1453,18 @@ ingress:
   - service: http_status:404
 EOF
 
-# Install tunnel as a service
+# Add bypass rules for static assets (prevent Zero Trust login page)
+# In Cloudflare dashboard → Zero Trust → Access → Applications → Create application
+# Name: Dashboard Static Assets
+# Application domain: dashboard.yourdomain.com
+# Path: Match regex: \.(js|css|json|png|jpg|svg|ico|woff|woff2|ttf|eot)$
+# Also add: Path equals /manifest.webmanifest
+# Policy: Allow everyone (bypass)
+
+# Install as service
 sudo cloudflared service install
 sudo systemctl enable cloudflared
 sudo systemctl start cloudflared
-```
-
-**Step 4: Configure dashboard backend**
-
-```bash
-cd ~/clawd/vault/dev/repos/claw-interface
-
-# Create .env file
-cat > .env << EOF
-PORT=3080
-MONGODB_URI=mongodb://localhost:27017/claw-interface
-NODE_ENV=production
-EOF
-
-# Start MongoDB (if not already running)
-sudo systemctl enable mongodb
-sudo systemctl start mongodb
-
-# Deploy dashboard
-./deploy.sh
-```
-
-**Step 5: Verify access**
-
-```bash
-# Check dashboard is running locally
-curl http://localhost:3080/api/health
-
-# Check Cloudflare tunnel status
-cloudflared tunnel info bot-dashboard
-
-# Test public access
-curl https://dashboard.yourdomain.com
 ```
 
 **Verify:**
@@ -1439,18 +1473,16 @@ curl https://dashboard.yourdomain.com
 # Dashboard running locally
 curl -sf http://localhost:3080/api/health && echo "✓ Local OK"
 
-# Cloudflare tunnel active
-sudo systemctl status cloudflared | grep "active (running)"
-
-# Public access works
-curl -sf https://dashboard.yourdomain.com && echo "✓ Public OK"
+# Systemd services active
+systemctl --user is-active claw-interface-backend && echo "✓ Backend OK"
+systemctl --user is-active claw-interface-frontend && echo "✓ Frontend OK"
 ```
 
-- [ ] Forked claw-interface repo
-- [ ] Subdomain DNS configured
-- [ ] Cloudflare tunnel installed and running
-- [ ] Dashboard accessible at subdomain
-- [ ] MongoDB connected
+- [ ] Cloned claw-interface repo
+- [ ] MongoDB installed and running
+- [ ] Dashboard customized with your settings
+- [ ] Dashboard deployed and accessible locally
+- [ ] (Optional) Cloudflare Zero Trust configured
 
 ---
 
@@ -1580,13 +1612,18 @@ gog gmail search 'newer_than:1d' --max 1 && echo "✓ Read access OK"
 
 ---
 
-### ✅ Step 19: Daily Email Check (Optional)
+### ✅ Step 19: Daily Email Check
 
 **What this is:** Daily inbox zero workflow - processes newsletters, actionable emails, and organizes everything (runs daily at 6:00 PM)
 
 **Why it matters:** Your bot can keep your email organized, extract insights from newsletters, and ensure nothing important gets missed.
 
-**Note:** This is Nova's full email processing workflow. If you just want simple "urgent email alerts", skip this step and set up a simpler hourly check instead.
+**Two options:**
+
+1. **Full inbox zero workflow** (recommended) - Thorough newsletter processing, insight extraction, automatic filing
+2. **Simple urgent alerts** - Just hourly checks for important emails
+
+We're going to set up option 1 (full workflow), but you can switch to option 2 later if you prefer something simpler.
 
 **What the bot does:**
 
