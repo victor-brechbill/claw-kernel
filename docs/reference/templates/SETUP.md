@@ -1267,67 +1267,86 @@ python3 ~/clawd/skills/passwords/scripts/decrypt.py && echo "✓ Decrypt works"
 
 ---
 
-### ✅ Step 16: GitHub SSH Key Setup
+### Step 16: GitHub SSH Key Setup
 
 **What this is:** SSH key for bot to access your GitHub repositories
 
 **Why it matters:** Your bot needs to clone repos, push commits, and create PRs. SSH keys are more secure than HTTPS passwords.
 
-**Implementation:**
+**Bot: DO THIS AUTOMATICALLY**
 
-```bash
-# Generate SSH key for bot
-ssh-keygen -t ed25519 -C "bot@yourdomain.com" -f ~/.ssh/github-bot -N ""
+1. **Check if SSH key already exists:**
 
-# Start SSH agent
-eval "$(ssh-agent -s)"
+   ```bash
+   ls -la ~/.ssh/github-bot* 2>/dev/null
+   ```
 
-# Add key to agent
-ssh-add ~/.ssh/github-bot
+   - If exists → skip to step 3 (display public key)
+   - If not → continue to step 2
 
-# Display public key (copy this)
-cat ~/.ssh/github-bot.pub
-```
+2. **Generate SSH key for the bot:**
 
-**Add to GitHub:**
+   ```bash
+   ssh-keygen -t ed25519 -C "bot@$(hostname)" -f ~/.ssh/github-bot -N ""
+   ```
 
-1. Copy the public key from above
-2. Go to [github.com/settings/keys](https://github.com/settings/keys)
-3. Click "New SSH key"
-4. Title: "Bot on [your-server-name]"
-5. Paste the public key
-6. Click "Add SSH key"
+3. **Display the public key to user:**
 
-**Configure SSH for GitHub:**
+   ```bash
+   echo "=== Copy this public key to GitHub ==="
+   cat ~/.ssh/github-bot.pub
+   echo "======================================"
+   ```
 
-```bash
-# Add to SSH config
-cat >> ~/.ssh/config << 'EOF'
+4. **Instruct the user:**
+   "I've generated an SSH key for this bot. Please add it to your GitHub account:
+   1. Copy the public key above (starts with 'ssh-ed25519')
+   2. Go to https://github.com/settings/keys
+   3. Click 'New SSH key'
+   4. Title: 'Bot on [hostname]'
+   5. Paste the public key
+   6. Click 'Add SSH key'
+
+   Reply when you've added it to GitHub."
+
+5. **After user confirms, configure SSH:**
+   ```bash
+   # Add to SSH config if not already present
+   if ! grep -q "Host github.com" ~/.ssh/config 2>/dev/null; then
+     cat >> ~/.ssh/config << 'SSHEOF'
+   ```
 
 # GitHub bot key
-Host github.com
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/github-bot
-  IdentitiesOnly yes
-EOF
 
-# Test connection
-ssh -T git@github.com
-# Should see: "Hi [username]! You've successfully authenticated..."
-```
+Host github.com
+HostName github.com
+User git
+IdentityFile ~/.ssh/github-bot
+IdentitiesOnly yes
+SSHEOF
+chmod 600 ~/.ssh/config
+fi
+
+````
+
+6. **Test the connection:**
+```bash
+ssh -T git@github.com 2>&1
+````
+
+- Should see: "Hi [username]! You've successfully authenticated..."
+- If it works → ✅ Step complete
+- If it fails → troubleshoot (check if user actually added the key)
 
 **Verify:**
 
 ```bash
-# Test SSH connection to GitHub
-ssh -T git@github.com 2>&1 | grep "successfully authenticated"
-
-# Test clone (use a small public repo)
-cd /tmp && git clone git@github.com:torvalds/linux.git --depth 1 && rm -rf linux
+# Final verification
+ssh -T git@github.com 2>&1 | grep "successfully authenticated" && echo "✅ GitHub SSH key working!"
 ```
 
-- [ ] SSH key generated and added to GitHub
+- [ ] SSH key generated
+- [ ] User added public key to GitHub
 - [ ] SSH config updated
 - [ ] Verified GitHub SSH authentication works
 
