@@ -1178,10 +1178,10 @@ chmod 700 ~/clawd/vault
 # Download password encryption scripts
 mkdir -p ~/clawd/skills/passwords/scripts
 curl -o ~/clawd/skills/passwords/scripts/encrypt.py \
-  https://raw.githubusercontent.com/victor-brechbill/nova-kernel/main/skills/passwords/scripts/encrypt.py
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/skills/passwords/scripts/encrypt.py
 
 curl -o ~/clawd/skills/passwords/scripts/decrypt.py \
-  https://raw.githubusercontent.com/victor-brechbill/nova-kernel/main/skills/passwords/scripts/decrypt.py
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/skills/passwords/scripts/decrypt.py
 
 chmod +x ~/clawd/skills/passwords/scripts/*.py
 
