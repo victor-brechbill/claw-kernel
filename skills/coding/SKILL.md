@@ -116,20 +116,20 @@ Evaluate the task scope:
 **Large task** (new feature, multi-file change, architectural work):
 
 1. Assign a ticket ID: `{PREFIX}-{number}`
-2. Write a full Task Brief — proceed to Step 2b
+2. Write a full Spec — proceed to Step 2b
 
 > **Terminology:**
 >
 > - **PRD** (Product Requirements Document) = Lives in `docs/product-requirements/` in the repo. Defines the _what_ and _why_ with labeled requirements (PRD-XXX-RNN). These are enforceable specs.
-> - **Task Brief** = Implementation spec for a specific task. Tells the developer _how_ to build it. References PRDs when applicable.
+> - **Spec** = Implementation spec for a specific task. Tells the developer _how_ to build it. References PRDs when applicable.
 
-### Step 2b: Task Brief Process
+### Step 2b: Spec Process
 
-1. Create Task Brief file at `~/clawd/coding/briefs/{PREFIX}-{id}-brief.md`
-2. Task Brief structure:
+1. Create Spec file at `~/clawd/coding/specs/{PREFIX}-{id}-spec.md`
+2. Spec structure:
 
    ```markdown
-   # Task Brief: {PREFIX}-{id} — {Title}
+   # Spec: {PREFIX}-{id} — {Title}
 
    ## Problem Statement
 
@@ -167,7 +167,7 @@ Evaluate the task scope:
 3. Send the user a summary message:
 
    ```
-   📋 Task Brief Ready for Review: {PREFIX}-{id} — {Title}
+   📋 Spec Ready for Review: {PREFIX}-{id} — {Title}
 
    {2-3 sentence summary}
 
@@ -177,7 +177,7 @@ Evaluate the task scope:
    ```
 
 4. **Wait for the user's explicit approval in chat** before proceeding
-5. On approval, create GitHub issue(s) referencing the Task Brief
+5. On approval, create GitHub issue(s) referencing the Spec
 6. Proceed to Step 3
 
 ### Step 3: Spawn Developer Agent
@@ -888,7 +888,7 @@ When a task completes and is merged:
 | File                    | Path                                            |
 | ----------------------- | ----------------------------------------------- |
 | **Active tasks (JSON)** | `~/clawd/coding/active-tasks.json`              |
-| Task Briefs             | `~/clawd/coding/briefs/{PREFIX}-{id}-brief.md`  |
+| Specs                   | `~/clawd/coding/specs/{PREFIX}-{id}-spec.md`    |
 | Dev status              | `~/clawd/coding/status/{PREFIX}-{id}-dev.md`    |
 | Review reports          | `~/clawd/coding/status/{PREFIX}-{id}-review.md` |
 | Retry log               | Tracked within the dev status file              |

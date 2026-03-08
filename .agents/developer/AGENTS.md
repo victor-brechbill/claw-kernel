@@ -59,7 +59,7 @@ Read `docs/product-requirements/REQUIREMENTS-INDEX.md` if it exists. Scan for re
 - Note in status file AND PR description: `⚠️ CONFLICTS WITH [PRD-XXX-RNN]: [what the requirement says] vs [what this change does]`
 - Do NOT silently violate, remove, or modify the requirement
 - You may still proceed with the implementation, but the conflict MUST be visible in your output
-- If the task brief explicitly says to change a requirement, include the PRD update in your PR
+- If the spec explicitly says to change a requirement, include the PRD update in your PR
 
 ### 4. Launch Claude Code (DO THIS IMMEDIATELY)
 
