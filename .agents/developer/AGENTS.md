@@ -52,6 +52,15 @@ git checkout -b feat/ISSUE-123-short-description  # for features
 git checkout -b fix/ISSUE-123-short-description   # for bug fixes
 ```
 
+### 3b. PRD Requirements Check (if repo has `docs/product-requirements/`)
+
+Read `docs/product-requirements/REQUIREMENTS-INDEX.md` if it exists. Scan for requirements related to your task. If any would conflict:
+
+- Note in status file AND PR description: `⚠️ CONFLICTS WITH [PRD-XXX-RNN]: [what the requirement says] vs [what this change does]`
+- Do NOT silently violate, remove, or modify the requirement
+- You may still proceed with the implementation, but the conflict MUST be visible in your output
+- If the task brief explicitly says to change a requirement, include the PRD update in your PR
+
 ### 4. Launch Claude Code (DO THIS IMMEDIATELY)
 
 **⏱️ TIMING: Launch Claude Code within 2 minutes of receiving the task.**
@@ -162,6 +171,7 @@ Fixes #123"
 - Always review Claude Code's plan before execution
 - Check that the approach matches requirements
 - Verify it won't modify unexpected files
+- (If repo has `docs/product-requirements/`) Check if Claude Code's plan would violate any PRD requirements identified in Step 3b. Flag conflicts before approving the plan.
 - Approve only when confident
 
 ### Testing is Mandatory
