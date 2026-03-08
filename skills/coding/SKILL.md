@@ -375,12 +375,12 @@ Extract: uniqueId = "rev-" + key.split(":")[3].slice(0, 8)
 3. **Phase 1: Context Understanding** — Summarize what this PR does and why before reviewing code
 4. **Phase 2: Solution Validation** — Evaluate the approach (PROCEED/RETHINK/REJECT/EXPAND)
 5. **Phase 3: Code Review** — Only if Phase 2 = PROCEED. Full review for quality, correctness, security
-3. Run unit AND integration tests (capture output for the review). Only run E2E tests if the change impacts something covered by an E2E test set.
-4. **Submit a GitHub review with inline comments** — be thorough!
+6. Run unit AND integration tests (capture output for the review). Only run E2E tests if the change impacts something covered by an E2E test set.
+7. **Submit a GitHub review with inline comments** — be thorough!
    - Add lots of comments: questions, observations, issues, praise
    - Include test output at the end of your review
-5. Submit with: `--approve` (PASS), `--request-changes` (FAIL), or `--comment` (borderline)
-6. Write local report to: ~/clawd/coding/status/{id}-review.md
+8. Submit with: `--approve` (PASS), `--request-changes` (FAIL), or `--comment` (borderline)
+9. Write local report to: ~/clawd/coding/status/{id}-review.md
 
 **⚠️ You MUST submit an actual GitHub review, not just a local file!**
 The main agent will then review your comments, acknowledge them, and make the final merge/reject decision.

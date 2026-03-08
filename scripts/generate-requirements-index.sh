@@ -35,10 +35,11 @@ echo "" >> "$INDEX_FILE"
 echo "| Label | Level | Description | Source |" >> "$INDEX_FILE"
 echo "|-------|-------|-------------|--------|" >> "$INDEX_FILE"
 
-count=0
-for prd in "$PRD_DIR"/0*.md; do
+for prd in "$PRD_DIR"/[0-9]*.md; do
+    [ -f "$prd" ] || continue
     filename=$(basename "$prd")
     { grep -n '\*\*\[PRD-[0-9]*-R[0-9]*\]\*\*' "$prd" 2>/dev/null || true; } | while IFS= read -r match; do
+        [ -z "$match" ] && continue
         lineno=$(echo "$match" | cut -d: -f1)
         line=$(echo "$match" | cut -d: -f2-)
         label=$(echo "$line" | grep -o 'PRD-[0-9]*-R[0-9]*')
@@ -49,15 +50,14 @@ for prd in "$PRD_DIR"/0*.md; do
         elif echo "$line" | grep -q 'SHOULD'; then level="SHOULD"
         elif echo "$line" | grep -q 'MAY'; then level="MAY"
         fi
-        desc=$(echo "$line" | sed 's/.*\*\*\[PRD-[0-9]*-R[0-9]*\]\*\*[[:space:]]*//' | sed 's/\*//g' | head -c 200)
+        desc=$(echo "$line" | sed 's/.*\*\*\[PRD-[0-9]*-R[0-9]*\]\*\*[[:space:]]*//' | sed 's/\*//g' | cut -c1-200 | sed 's/ [^ ]*$/…/')
         echo "| \`$label\` | $level | $desc | [$filename#L$lineno]($filename#L$lineno) |" >> "$INDEX_FILE"
-        count=$((count + 1))
     done
 done
 
 echo "" >> "$INDEX_FILE"
+total=$(grep -c '| `PRD-' "$INDEX_FILE" 2>/dev/null || true)
 echo "---" >> "$INDEX_FILE"
-echo "*Total requirements: $(grep -c 'PRD-[0-9]*-R[0-9]*' "$INDEX_FILE" 2>/dev/null || echo 0)*" >> "$INDEX_FILE"
+echo "*Total requirements: ${total:-0}*" >> "$INDEX_FILE"
 
-total=$(grep -c '| `PRD-' "$INDEX_FILE" 2>/dev/null || echo 0)
-echo "Generated $INDEX_FILE with $total requirements"
+echo "Generated $INDEX_FILE with ${total:-0} requirements"
