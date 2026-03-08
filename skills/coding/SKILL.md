@@ -116,15 +116,20 @@ Evaluate the task scope:
 **Large task** (new feature, multi-file change, architectural work):
 
 1. Assign a ticket ID: `{PREFIX}-{number}`
-2. Write a full PRD — proceed to Step 2b
+2. Write a full Spec — proceed to Step 2b
 
-### Step 2b: PRD Process
+> **Terminology:**
+>
+> - **PRD** (Product Requirements Document) = Lives in `docs/product-requirements/` in the repo. Defines the _what_ and _why_ with labeled requirements (PRD-XXX-RNN). These are enforceable specs.
+> - **Spec** = Implementation spec for a specific task. Tells the developer _how_ to build it. References PRDs when applicable.
 
-1. Create PRD file at `~/clawd/coding/prds/{PREFIX}-{id}-prd.md`
-2. PRD structure:
+### Step 2b: Spec Process
+
+1. Create Spec file at `~/clawd/coding/specs/{PREFIX}-{id}-spec.md`
+2. Spec structure:
 
    ```markdown
-   # PRD: {PREFIX}-{id} — {Title}
+   # Spec: {PREFIX}-{id} — {Title}
 
    ## Problem Statement
 
@@ -146,6 +151,10 @@ Evaluate the task scope:
 
    [Numbered list of specific requirements]
 
+   ## Affected Requirements
+
+   [List any PRD requirements (PRD-XXX-RNN) that this task modifies, extends, or could conflict with. Check REQUIREMENTS-INDEX.md. Write "None identified" if no conflicts.]
+
    ## Acceptance Criteria
 
    [How do we know it's done?]
@@ -158,17 +167,17 @@ Evaluate the task scope:
 3. Send the user a summary message:
 
    ```
-   📋 PRD Ready for Review: {PREFIX}-{id} — {Title}
+   📋 Spec Ready for Review: {PREFIX}-{id} — {Title}
 
    {2-3 sentence summary}
 
-   Full PRD: [file path or inline]
+   Full brief: [file path or inline]
 
    Approve to proceed, or reply with feedback.
    ```
 
 4. **Wait for the user's explicit approval in chat** before proceeding
-5. On approval, create GitHub issue(s) referencing the PRD
+5. On approval, create GitHub issue(s) referencing the Spec
 6. Proceed to Step 3
 
 ### Step 3: Spawn Developer Agent
@@ -207,6 +216,9 @@ Extract: uniqueId = "dev-" + key.split(":")[3].slice(0, 8)
 
 ### Requirements
 [Copy requirements/acceptance criteria here]
+
+### 📋 PRD Requirements Check
+Before implementing, read `docs/product-requirements/REQUIREMENTS-INDEX.md` if it exists in the repo. Scan for requirements related to your change. If your implementation would conflict with any labeled requirement (PRD-XXX-RNN), flag it in your status file with `⚠️ CONFLICTS WITH [PRD-XXX-RNN]` and note what needs to change. Do NOT silently violate requirements.
 
 ### Context
 [Any additional context, related files, architecture notes]
@@ -294,6 +306,7 @@ When the Developer reports completion with a PR link (or direct commit):
    - Does the branch name match conventions?
    - Are there tests?
 3. **🚨 Check for binaries/blobs:**
+
    ```bash
    # Check for compiled binaries in the commit
    git diff --name-only origin/main | xargs -I{} file "{}" 2>/dev/null | grep -E "executable|ELF"
@@ -303,6 +316,7 @@ When the Developer reports completion with a PR link (or direct commit):
 
    - If 100s of files changed or 10k+ lines for a small task → investigate
    - If any ELF/executable files → STOP, they shouldn't be committed
+
 4. If something looks clearly wrong, send back to Developer with feedback (counts as a retry)
 5. If it looks reasonable, proceed to Step 6
 
@@ -357,15 +371,16 @@ Extract: uniqueId = "rev-" + key.split(":")[3].slice(0, 8)
 
 ### Review Instructions
 1. Your AGENTS.md in ~/clawd-code-reviewer/ is your complete manual. Read it.
-2. **Phase 1: Context Understanding** — Summarize what this PR does and why before reviewing code
-3. **Phase 2: Solution Validation** — Evaluate the approach (PROCEED/RETHINK/REJECT/EXPAND)
-4. **Phase 3: Code Review** — Only if Phase 2 = PROCEED. Full review for quality, correctness, security
-3. Run unit AND integration tests (capture output for the review). Only run E2E tests if the change impacts something covered by an E2E test set.
-4. **Submit a GitHub review with inline comments** — be thorough!
+2. **Phase 0: PRD Requirements Check** — Read `docs/product-requirements/REQUIREMENTS-INDEX.md` if it exists. Scan for requirements related to the changed files/domain. If any changes violate a labeled requirement, flag as BLOCKING: `⚠️ VIOLATES [PRD-XXX-RNN]: [explanation]`
+3. **Phase 1: Context Understanding** — Summarize what this PR does and why before reviewing code
+4. **Phase 2: Solution Validation** — Evaluate the approach (PROCEED/RETHINK/REJECT/EXPAND)
+5. **Phase 3: Code Review** — Only if Phase 2 = PROCEED. Full review for quality, correctness, security
+6. Run unit AND integration tests (capture output for the review). Only run E2E tests if the change impacts something covered by an E2E test set.
+7. **Submit a GitHub review with inline comments** — be thorough!
    - Add lots of comments: questions, observations, issues, praise
    - Include test output at the end of your review
-5. Submit with: `--approve` (PASS), `--request-changes` (FAIL), or `--comment` (borderline)
-6. Write local report to: ~/clawd/coding/status/{id}-review.md
+8. Submit with: `--approve` (PASS), `--request-changes` (FAIL), or `--comment` (borderline)
+9. Write local report to: ~/clawd/coding/status/{id}-review.md
 
 **⚠️ You MUST submit an actual GitHub review, not just a local file!**
 The main agent will then review your comments, acknowledge them, and make the final merge/reject decision.
@@ -430,7 +445,24 @@ Read through:
 
 You can reply to comments via the GitHub API or web UI. At minimum, ensure no comments are left hanging.
 
-#### 7c. Make the Final Decision
+#### 7c. Handle PRD Requirement Conflicts (if flagged)
+
+**If the developer or reviewer flagged `⚠️ CONFLICTS WITH [PRD-XXX-RNN]` or `⚠️ VIOLATES [PRD-XXX-RNN]`:**
+
+This is a requirements conflict — do NOT merge until resolved.
+
+1. **Read the flagged requirement** — open the source PRD and read the full context
+2. **Assess the conflict** — is this genuine or a misunderstanding?
+
+| Situation                                                                                        | Action                                                                                   |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **False alarm** — code doesn't actually violate the requirement                                  | Dismiss with explanation in PR comment. Proceed normally.                                |
+| **Requirement is outdated** — PRD hasn't been updated to reflect a prior decision                | Update the PRD and index. Note in PR. Include PRD changes in same PR.                    |
+| **Genuine conflict — minor** — requirement needs small adjustment aligned with project direction | Update the PRD, note the change in PR description.                                       |
+| **Genuine conflict — significant** — fundamentally alters designed behavior                      | **Escalate to the user.** Do NOT merge until approved.                                   |
+| **New behavior not covered** — PR adds functionality that should be a requirement                | Add the new requirement to the relevant PRD. Re-run index generator. Include in same PR. |
+
+#### 7d. Make the Final Decision
 
 **If Code Reviewer APPROVED (PASS):**
 
@@ -856,7 +888,7 @@ When a task completes and is merged:
 | File                    | Path                                            |
 | ----------------------- | ----------------------------------------------- |
 | **Active tasks (JSON)** | `~/clawd/coding/active-tasks.json`              |
-| PRDs                    | `~/clawd/coding/prds/{PREFIX}-{id}-prd.md`      |
+| Specs                   | `~/clawd/coding/specs/{PREFIX}-{id}-spec.md`    |
 | Dev status              | `~/clawd/coding/status/{PREFIX}-{id}-dev.md`    |
 | Review reports          | `~/clawd/coding/status/{PREFIX}-{id}-review.md` |
 | Retry log               | Tracked within the dev status file              |
