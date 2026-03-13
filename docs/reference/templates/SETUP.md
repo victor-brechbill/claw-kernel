@@ -1081,6 +1081,8 @@ tail ~/clawd/logs/gateway-watchdog.log
 - [ ] Cron job installed (runs every 5 minutes)
 - [ ] Verified script runs without errors
 
+> **⚠️ Do NOT use a hardware watchdog (`/dev/watchdog0`) or Linux watchdog daemon (`/usr/sbin/watchdog`) to monitor gateway health.** If the gateway enters a crash loop (e.g. bad build, corrupted config), a hardware watchdog will **reboot the entire server** every few minutes — making it nearly impossible to SSH in and fix the problem. The cron-based `gateway-watchdog.sh` above is the correct tool: it restarts only the gateway service, not the server. If your VPS provider or OS ships with a hardware watchdog, ensure its `test-binary` does **not** check gateway health.
+
 ---
 
 ### ✅ Step 13: Memory Directory Setup

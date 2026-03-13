@@ -1,7 +1,3 @@
-import type { MessagingToolSend } from "../../agents/pi-embedded-messaging.js";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { AgentDefaultsConfig } from "../../config/types.js";
-import type { CronJob } from "../types.js";
 import {
   resolveAgentConfig,
   resolveAgentDir,
@@ -24,6 +20,7 @@ import {
   resolveHooksGmailModel,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
+import type { MessagingToolSend } from "../../agents/pi-embedded-messaging.js";
 import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
 import { runSubagentAnnounceFlow } from "../../agents/subagent-announce.js";
 import { countActiveDescendantRuns } from "../../agents/subagent-registry.js";
@@ -37,11 +34,13 @@ import {
 } from "../../auto-reply/thinking.js";
 import { SILENT_REPLY_TOKEN } from "../../auto-reply/tokens.js";
 import { createOutboundSendDeps, type CliDeps } from "../../cli/outbound-send-deps.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import {
   resolveAgentMainSessionKey,
   resolveSessionTranscriptPath,
   updateSessionStore,
 } from "../../config/sessions.js";
+import type { AgentDefaultsConfig } from "../../config/types.js";
 import { registerAgentRunContext } from "../../infra/agent-events.js";
 import { deliverOutboundPayloads } from "../../infra/outbound/deliver.js";
 import { resolveAgentOutboundIdentity } from "../../infra/outbound/identity.js";
@@ -54,6 +53,7 @@ import {
   isExternalHookSession,
 } from "../../security/external-content.js";
 import { resolveCronDeliveryPlan } from "../delivery.js";
+import type { CronJob } from "../types.js";
 import { resolveDeliveryTarget } from "./delivery-target.js";
 import {
   isHeartbeatOnlyResponse,
@@ -400,71 +400,88 @@ export async function runCronIsolatedAgentTurn(params: {
   let fallbackModel = model;
   const runStartedAt = Date.now();
   let runEndedAt = runStartedAt;
-  try {
-    const sessionFile = resolveSessionTranscriptPath(cronSession.sessionEntry.sessionId, agentId);
-    const resolvedVerboseLevel =
-      normalizeVerboseLevel(cronSession.sessionEntry.verboseLevel) ??
-      normalizeVerboseLevel(agentCfg?.verboseDefault) ??
-      "off";
-    registerAgentRunContext(cronSession.sessionEntry.sessionId, {
-      sessionKey: agentSessionKey,
-      verboseLevel: resolvedVerboseLevel,
-    });
-    const messageChannel = resolvedDelivery.channel;
-    const fallbackResult = await runWithModelFallback({
-      cfg: cfgWithAgentDefaults,
-      provider,
-      model,
-      agentDir,
-      fallbacksOverride: resolveAgentModelFallbacksOverride(params.cfg, agentId),
-      run: (providerOverride, modelOverride) => {
-        if (isCliProvider(providerOverride, cfgWithAgentDefaults)) {
-          const cliSessionId = getCliSessionId(cronSession.sessionEntry, providerOverride);
-          return runCliAgent({
+
+  const CRON_RATE_LIMIT_MAX_RETRIES = 2;
+  const CRON_RATE_LIMIT_BACKOFF_MS = [60_000, 120_000]; // 1min, 2min
+
+  for (let attempt = 0; attempt <= CRON_RATE_LIMIT_MAX_RETRIES; attempt++) {
+    try {
+      const sessionFile = resolveSessionTranscriptPath(cronSession.sessionEntry.sessionId, agentId);
+      const resolvedVerboseLevel =
+        normalizeVerboseLevel(cronSession.sessionEntry.verboseLevel) ??
+        normalizeVerboseLevel(agentCfg?.verboseDefault) ??
+        "off";
+      registerAgentRunContext(cronSession.sessionEntry.sessionId, {
+        sessionKey: agentSessionKey,
+        verboseLevel: resolvedVerboseLevel,
+      });
+      const messageChannel = resolvedDelivery.channel;
+      const fallbackResult = await runWithModelFallback({
+        cfg: cfgWithAgentDefaults,
+        provider,
+        model,
+        agentDir,
+        fallbacksOverride: resolveAgentModelFallbacksOverride(params.cfg, agentId),
+        run: (runProvider, runModel) => {
+          if (isCliProvider(runProvider, cfgWithAgentDefaults)) {
+            const cliSessionId = getCliSessionId(cronSession.sessionEntry, runProvider);
+            return runCliAgent({
+              sessionId: cronSession.sessionEntry.sessionId,
+              sessionKey: agentSessionKey,
+              agentId,
+              sessionFile,
+              workspaceDir,
+              config: cfgWithAgentDefaults,
+              prompt: commandBody,
+              provider: runProvider,
+              model: runModel,
+              thinkLevel,
+              timeoutMs,
+              runId: cronSession.sessionEntry.sessionId,
+              cliSessionId,
+            });
+          }
+          return runEmbeddedPiAgent({
             sessionId: cronSession.sessionEntry.sessionId,
             sessionKey: agentSessionKey,
             agentId,
+            messageChannel,
+            agentAccountId: resolvedDelivery.accountId,
             sessionFile,
             workspaceDir,
             config: cfgWithAgentDefaults,
+            skillsSnapshot,
             prompt: commandBody,
-            provider: providerOverride,
-            model: modelOverride,
+            lane: params.lane ?? "cron",
+            provider: runProvider,
+            model: runModel,
             thinkLevel,
+            verboseLevel: resolvedVerboseLevel,
             timeoutMs,
             runId: cronSession.sessionEntry.sessionId,
-            cliSessionId,
+            requireExplicitMessageTarget: true,
+            disableMessageTool: deliveryRequested,
           });
-        }
-        return runEmbeddedPiAgent({
-          sessionId: cronSession.sessionEntry.sessionId,
-          sessionKey: agentSessionKey,
-          agentId,
-          messageChannel,
-          agentAccountId: resolvedDelivery.accountId,
-          sessionFile,
-          workspaceDir,
-          config: cfgWithAgentDefaults,
-          skillsSnapshot,
-          prompt: commandBody,
-          lane: params.lane ?? "cron",
-          provider: providerOverride,
-          model: modelOverride,
-          thinkLevel,
-          verboseLevel: resolvedVerboseLevel,
-          timeoutMs,
-          runId: cronSession.sessionEntry.sessionId,
-          requireExplicitMessageTarget: true,
-          disableMessageTool: deliveryRequested,
-        });
-      },
-    });
-    runResult = fallbackResult.result;
-    fallbackProvider = fallbackResult.provider;
-    fallbackModel = fallbackResult.model;
-    runEndedAt = Date.now();
-  } catch (err) {
-    return withRunSession({ status: "error", error: String(err) });
+        },
+      });
+      runResult = fallbackResult.result;
+      fallbackProvider = fallbackResult.provider;
+      fallbackModel = fallbackResult.model;
+      runEndedAt = Date.now();
+      break; // success — exit retry loop
+    } catch (err) {
+      const errStr = String(err);
+      const isRateLimit = /429|rate.limit|overloaded|too many requests/i.test(errStr);
+      if (isRateLimit && attempt < CRON_RATE_LIMIT_MAX_RETRIES) {
+        const delayMs = CRON_RATE_LIMIT_BACKOFF_MS[attempt] ?? 120_000;
+        logWarn(
+          `[cron:${params.job.id}] Rate limited (attempt ${attempt + 1}/${CRON_RATE_LIMIT_MAX_RETRIES + 1}), retrying in ${delayMs / 1000}s...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      return withRunSession({ status: "error", error: errStr });
+    }
   }
 
   const payloads = runResult.payloads ?? [];
