@@ -10,6 +10,7 @@ import {
   analyzeArgvCommand,
   evaluateExecAllowlist,
   evaluateShellAllowlist,
+  normalizeExecCommand,
   requiresExecApproval,
   normalizeExecApprovals,
   mergeExecApprovalsSocketDefaults,
@@ -522,8 +523,13 @@ export async function handleInvoke(
     return;
   }
 
-  const shellCommand = consistency.shellCommand;
-  const cmdText = consistency.cmdText;
+  // Normalize Unicode obfuscation before any allowlist check or display
+  const shellCommand = consistency.shellCommand
+    ? normalizeExecCommand(consistency.shellCommand)
+    : consistency.shellCommand;
+  const cmdText = consistency.cmdText
+    ? normalizeExecCommand(consistency.cmdText)
+    : consistency.cmdText;
   const agentId = params.agentId?.trim() || undefined;
   const cfg = loadConfig();
   const agentExec = agentId ? resolveAgentConfig(cfg, agentId)?.tools?.exec : undefined;

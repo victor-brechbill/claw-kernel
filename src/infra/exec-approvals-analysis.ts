@@ -6,6 +6,50 @@ import { splitShellArgs } from "../utils/shell-argv.js";
 
 export const DEFAULT_SAFE_BINS = ["jq", "grep", "cut", "sort", "uniq", "head", "tail", "tr", "wc"];
 
+// ── Unicode normalization ──────────────────────────────────────────────
+// Zero-width and invisible characters that can be used to obfuscate commands
+// in approval prompts or bypass allowlist matching.
+const ZERO_WIDTH_RE =
+  /[\u200B-\u200F\u2060\uFEFF]/g;
+
+// Fullwidth ASCII range: U+FF01 (！) – U+FF5E (～) → normal ASCII 0x21–0x7E
+const FULLWIDTH_RE = /[\uFF01-\uFF5E]/g;
+
+// Invisible format/control chars (Unicode Cf/Cc) that are NOT normal whitespace.
+// We escape these as [U+XXXX] so they are visible in approval prompts.
+// Range covers common Cf chars; excludes \t \n \r and space.
+const INVISIBLE_FORMAT_RE = new RegExp(
+  "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u00AD\\u034F\\u061C\\u070F\\u17B4\\u17B5\\u180B-\\u180E\\u200A\\u2028\\u2029\\u202A-\\u202E\\u2061-\\u2069\\u206A-\\u206F\\uFFF0-\\uFFF8]",
+  "g",
+);
+
+/**
+ * Normalizes a command string to prevent Unicode obfuscation attacks.
+ *
+ * 1. Strips zero-width characters (U+200B–U+200F, U+2060, U+FEFF)
+ * 2. Converts fullwidth ASCII (U+FF01–U+FF5E) to standard ASCII
+ * 3. Escapes remaining invisible format/control chars as [U+XXXX]
+ *
+ * Must be called BEFORE approval prompt display AND before allowlist matching.
+ */
+export function normalizeExecCommand(cmd: string): string {
+  // Step 1: strip zero-width chars
+  let result = cmd.replace(ZERO_WIDTH_RE, "");
+
+  // Step 2: fullwidth ASCII → normal ASCII (subtract 0xFEE0)
+  result = result.replace(FULLWIDTH_RE, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xfee0),
+  );
+
+  // Step 3: escape remaining invisible format/control chars
+  result = result.replace(INVISIBLE_FORMAT_RE, (ch) => {
+    const hex = ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0");
+    return `[U+${hex}]`;
+  });
+
+  return result;
+}
+
 function expandHome(value: string): string {
   if (!value) {
     return value;
@@ -128,7 +172,8 @@ function normalizeMatchTarget(value: string): string {
     const stripped = value.replace(/^\\\\[?.]\\/, "");
     return stripped.replace(/\\/g, "/").toLowerCase();
   }
-  return value.replace(/\\\\/g, "/").toLowerCase();
+  // Case-sensitive on Linux — do NOT lowercase
+  return value.replace(/\\\\/g, "/");
 }
 
 function tryRealpath(value: string): string | null {
@@ -156,7 +201,8 @@ function globToRegExp(pattern: string): RegExp {
       continue;
     }
     if (ch === "?") {
-      regex += ".";
+      // ? must stay within a single path segment (must not match /)
+      regex += "[^/]";
       i += 1;
       continue;
     }
@@ -164,7 +210,9 @@ function globToRegExp(pattern: string): RegExp {
     i += 1;
   }
   regex += "$";
-  return new RegExp(regex, "i");
+  // Case-sensitive on Linux; case-insensitive only on Windows
+  const flags = process.platform === "win32" ? "i" : "";
+  return new RegExp(regex, flags);
 }
 
 function matchesPattern(pattern: string, target: string): boolean {
@@ -905,4 +953,155 @@ export function analyzeArgvCommand(params: {
       },
     ],
   };
+}
+
+// ── Exec approval binding hardening ────────────────────────────────────
+
+// POSIX shell flags that consume the next argument as a value
+const POSIX_SHELL_VALUE_FLAGS = new Set(["-c"]);
+
+// Shells where `-c` binds the real script
+const KNOWN_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "fish", "ash"]);
+
+/**
+ * Unwraps pnpm runtime wrappers to reveal the actual command being executed.
+ *
+ * Detects:
+ * - `pnpm --reporter ... exec <cmd>` → rebinds to `<cmd>`
+ * - `pnpm node <script>` → rebinds to `node <script>`
+ */
+export function unwrapPnpmCommand(
+  argv: string[],
+  cwd?: string,
+  env?: NodeJS.ProcessEnv,
+): { unwrapped: true; argv: string[]; resolution: CommandResolution | null } | null {
+  if (argv.length < 2) {
+    return null;
+  }
+  const bin = path.basename(argv[0] ?? "").toLowerCase();
+  if (bin !== "pnpm" && bin !== "pnpm.exe" && bin !== "pnpm.cmd") {
+    return null;
+  }
+
+  // Skip pnpm flags until we find a subcommand
+  let i = 1;
+  while (i < argv.length) {
+    const token = argv[i];
+    if (!token) {break;}
+    // Skip --reporter=... / --reporter ...
+    if (token.startsWith("--")) {
+      if (token.includes("=")) {
+        i += 1;
+        continue;
+      }
+      // Flags like --reporter take next arg as value
+      if (token === "--reporter" || token === "--filter" || token === "--dir") {
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    break;
+  }
+
+  if (i >= argv.length) {
+    return null;
+  }
+
+  const subcommand = argv[i];
+  if (subcommand === "exec" && i + 1 < argv.length) {
+    const innerArgv = argv.slice(i + 1);
+    return {
+      unwrapped: true,
+      argv: innerArgv,
+      resolution: resolveCommandResolutionFromArgv(innerArgv, cwd, env),
+    };
+  }
+  if (subcommand === "node" && i + 1 < argv.length) {
+    const innerArgv = ["node", ...argv.slice(i + 1)];
+    return {
+      unwrapped: true,
+      argv: innerArgv,
+      resolution: resolveCommandResolutionFromArgv(innerArgv, cwd, env),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether a segment requires mandatory approval (fail-closed).
+ *
+ * Returns a reason string if the segment must require approval, or null if safe.
+ *
+ * Detects:
+ * - Perl `-M`/`-I` flags (module injection)
+ * - Ruby `-r`/`--require`/`-I` flags (require injection)
+ * - Inline loaders (node -e, python -c, etc.)
+ * - Ambiguous shell payloads
+ * - After POSIX shell `-c`, binds the real script as the segment command
+ */
+export function checkSegmentRequiresApproval(segment: ExecCommandSegment): string | null {
+  const resolution = segment.resolution;
+  if (!resolution) {
+    return null;
+  }
+  const execName = resolution.executableName?.toLowerCase() ?? "";
+  const argv = segment.argv;
+
+  // Perl: -M (load module), -I (include path) — code injection vectors
+  if (execName === "perl" || execName === "perl.exe") {
+    for (const arg of argv.slice(1)) {
+      if (arg.startsWith("-M") || arg.startsWith("-I") || arg === "-I" || arg === "-M") {
+        return `perl flag "${arg}" may inject code`;
+      }
+    }
+  }
+
+  // Ruby: -r/--require (load library), -I (include path) — code injection vectors
+  if (execName === "ruby" || execName === "ruby.exe") {
+    for (const arg of argv.slice(1)) {
+      if (
+        arg === "-r" ||
+        arg.startsWith("-r") ||
+        arg === "--require" ||
+        arg === "-I" ||
+        arg.startsWith("-I")
+      ) {
+        return `ruby flag "${arg}" may inject code`;
+      }
+    }
+  }
+
+  // Inline loaders: node -e, python -c, ruby -e, perl -e/-E
+  const INLINE_EXEC_BINS: Record<string, string[]> = {
+    node: ["-e", "--eval", "--input-type"],
+    python: ["-c"],
+    python3: ["-c"],
+    ruby: ["-e"],
+    perl: ["-e", "-E"],
+  };
+  const inlineFlags = INLINE_EXEC_BINS[execName];
+  if (inlineFlags) {
+    for (const arg of argv.slice(1)) {
+      if (inlineFlags.some((f) => arg === f || (f.startsWith("--") ? arg.startsWith(f + "=") : false))) {
+        return `inline code execution via ${execName} "${arg}"`;
+      }
+    }
+  }
+
+  // POSIX shell -c binding: after `sh -c '...'`, the script IS the command
+  if (KNOWN_SHELLS.has(execName)) {
+    for (let i = 1; i < argv.length; i++) {
+      const arg = argv[i];
+      if (arg && POSIX_SHELL_VALUE_FLAGS.has(arg)) {
+        // The next argument is the actual script — mark as needing approval
+        // because the shell is just a wrapper and the real payload is the script
+        return `shell -c payload requires approval`;
+      }
+    }
+  }
+
+  return null;
 }
