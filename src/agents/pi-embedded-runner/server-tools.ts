@@ -69,7 +69,7 @@ export function createServerToolsStreamFnWrapper(
     const originalOnPayload = options?.onPayload;
     return baseStreamFn(model, context, {
       ...options,
-      onPayload: (payload) => {
+      onPayload: (payload, payloadModel) => {
         if (payload && typeof payload === "object") {
           const p = payload as { tools?: unknown[] };
           if (!Array.isArray(p.tools)) {
@@ -84,7 +84,7 @@ export function createServerToolsStreamFnWrapper(
           p.tools.push(...defs);
           log.debug(`server tools: injected ${defs.length} definition(s) into payload`);
         }
-        originalOnPayload?.(payload);
+        originalOnPayload?.(payload, payloadModel);
       },
     });
   };
