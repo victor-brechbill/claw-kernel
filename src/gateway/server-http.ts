@@ -51,6 +51,7 @@ import {
 import { sendGatewayAuthFailure } from "./http-common.js";
 import { getBearerToken, getHeader } from "./http-utils.js";
 import { isPrivateOrLoopbackAddress, resolveGatewayClientIp } from "./net.js";
+import { checkBrowserOrigin } from "./origin-check.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
@@ -630,6 +631,23 @@ export function attachGatewayUpgradeHandler(opts: {
           return;
         }
       }
+      // GHSA-5wcw-8jjv-m286: Reject cross-site WebSocket hijacking.
+      // If the browser sends an Origin header, validate it before upgrading.
+      const origin = getHeader(req, "origin");
+      if (origin) {
+        const configSnapshot = loadConfig();
+        const originCheck = checkBrowserOrigin({
+          requestHost: req.headers.host,
+          origin,
+          allowedOrigins: configSnapshot.gateway?.controlUi?.allowedOrigins,
+        });
+        if (!originCheck.ok) {
+          socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+      }
+
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });
