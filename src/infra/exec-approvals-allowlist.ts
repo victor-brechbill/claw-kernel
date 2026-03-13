@@ -4,10 +4,12 @@ import type { ExecAllowlistEntry } from "./exec-approvals.js";
 import {
   DEFAULT_SAFE_BINS,
   analyzeShellCommand,
+  checkSegmentRequiresApproval,
   isWindowsPlatform,
   matchAllowlist,
   resolveAllowlistCandidatePath,
   splitCommandChain,
+  unwrapPnpmCommand,
   type ExecCommandAnalysis,
   type CommandResolution,
   type ExecCommandSegment,
@@ -141,6 +143,7 @@ function evaluateSegments(
     allowlist: ExecAllowlistEntry[];
     safeBins: Set<string>;
     cwd?: string;
+    env?: NodeJS.ProcessEnv;
     skillBins?: Set<string>;
     autoAllowSkills?: boolean;
   },
@@ -154,24 +157,48 @@ function evaluateSegments(
   const segmentSatisfiedBy: ExecSegmentSatisfiedBy[] = [];
 
   const satisfied = segments.every((segment) => {
-    const candidatePath = resolveAllowlistCandidatePath(segment.resolution, params.cwd);
+    // Fail closed: check if this segment requires mandatory approval
+    const requiresApproval = checkSegmentRequiresApproval(segment);
+    if (requiresApproval) {
+      segmentSatisfiedBy.push(null);
+      return false;
+    }
+
+    // Unwrap pnpm runtime wrappers to evaluate the real command
+    let effectiveSegment = segment;
+    const pnpmUnwrap = unwrapPnpmCommand(segment.argv, params.cwd, params.env);
+    if (pnpmUnwrap) {
+      effectiveSegment = {
+        raw: segment.raw,
+        argv: pnpmUnwrap.argv,
+        resolution: pnpmUnwrap.resolution,
+      };
+      // Check the unwrapped command too
+      const unwrappedCheck = checkSegmentRequiresApproval(effectiveSegment);
+      if (unwrappedCheck) {
+        segmentSatisfiedBy.push(null);
+        return false;
+      }
+    }
+
+    const candidatePath = resolveAllowlistCandidatePath(effectiveSegment.resolution, params.cwd);
     const candidateResolution =
-      candidatePath && segment.resolution
-        ? { ...segment.resolution, resolvedPath: candidatePath }
-        : segment.resolution;
+      candidatePath && effectiveSegment.resolution
+        ? { ...effectiveSegment.resolution, resolvedPath: candidatePath }
+        : effectiveSegment.resolution;
     const match = matchAllowlist(params.allowlist, candidateResolution);
     if (match) {
       matches.push(match);
     }
     const safe = isSafeBinUsage({
-      argv: segment.argv,
-      resolution: segment.resolution,
+      argv: effectiveSegment.argv,
+      resolution: effectiveSegment.resolution,
       safeBins: params.safeBins,
       cwd: params.cwd,
     });
     const skillAllow =
-      allowSkills && segment.resolution?.executableName
-        ? params.skillBins?.has(segment.resolution.executableName)
+      allowSkills && effectiveSegment.resolution?.executableName
+        ? params.skillBins?.has(effectiveSegment.resolution.executableName)
         : false;
     const by: ExecSegmentSatisfiedBy = match
       ? "allowlist"
@@ -192,6 +219,7 @@ export function evaluateExecAllowlist(params: {
   allowlist: ExecAllowlistEntry[];
   safeBins: Set<string>;
   cwd?: string;
+  env?: NodeJS.ProcessEnv;
   skillBins?: Set<string>;
   autoAllowSkills?: boolean;
 }): ExecAllowlistEvaluation {
@@ -208,6 +236,7 @@ export function evaluateExecAllowlist(params: {
         allowlist: params.allowlist,
         safeBins: params.safeBins,
         cwd: params.cwd,
+        env: params.env,
         skillBins: params.skillBins,
         autoAllowSkills: params.autoAllowSkills,
       });
@@ -225,6 +254,7 @@ export function evaluateExecAllowlist(params: {
     allowlist: params.allowlist,
     safeBins: params.safeBins,
     cwd: params.cwd,
+    env: params.env,
     skillBins: params.skillBins,
     autoAllowSkills: params.autoAllowSkills,
   });

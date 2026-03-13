@@ -10,6 +10,7 @@ import {
   evaluateShellAllowlist,
   maxAsk,
   minSecurity,
+  normalizeExecCommand,
   requiresExecApproval,
   resolveSafeBins,
   recordAllowlistUse,
@@ -170,6 +171,9 @@ export function createExecTool(
       if (!params.command) {
         throw new Error("Provide a command to start.");
       }
+
+      // Normalize Unicode obfuscation before any allowlist check or display
+      params.command = normalizeExecCommand(params.command);
 
       const maxOutput = DEFAULT_MAX_OUTPUT;
       const pendingMaxOutput = DEFAULT_PENDING_MAX_OUTPUT;
