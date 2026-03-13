@@ -47,7 +47,7 @@ import {
   validateConnectParams,
   validateRequestFrame,
 } from "../../protocol/index.js";
-import { MAX_BUFFERED_BYTES, MAX_PAYLOAD_BYTES, TICK_INTERVAL_MS } from "../../server-constants.js";
+import { MAX_BUFFERED_BYTES, MAX_PAYLOAD_BYTES, MAX_PREAUTH_PAYLOAD_BYTES, TICK_INTERVAL_MS } from "../../server-constants.js";
 import { handleGatewayRequest } from "../../server-methods.js";
 import { formatError } from "../../server-utils.js";
 import { formatForLog, logWs } from "../../ws-log.js";
@@ -174,6 +174,16 @@ export function attachGatewayWsMessageHandler(params: {
       return;
     }
     const text = rawDataToString(data);
+
+    // Reject oversized frames from unauthenticated connections to prevent
+    // memory-based denial-of-service before the client has proven identity.
+    if (!getClient() && Buffer.byteLength(text, "utf8") > MAX_PREAUTH_PAYLOAD_BYTES) {
+      setHandshakeState("failed");
+      setCloseCause("preauth-payload-too-large");
+      close(1009, "message too big");
+      return;
+    }
+
     try {
       const parsed = JSON.parse(text);
       const frameType =
