@@ -206,21 +206,8 @@ export function createSessionsSpawnTool(opts?: {
         }
         thinkingOverride = normalized;
       }
-      try {
-        await callGateway({
-          method: "sessions.patch",
-          params: { key: childSessionKey, spawnDepth: childDepth },
-          timeoutMs: 10_000,
-        });
-      } catch (err) {
-        const messageText =
-          err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-        return jsonResult({
-          status: "error",
-          error: messageText,
-          childSessionKey,
-        });
-      }
+      // spawnDepth is passed via the agent method (not sessions.patch) to prevent
+      // external callers from setting lineage fields (GHSA-2rqg-gjgv-84jm).
 
       if (resolvedModel) {
         try {
@@ -296,6 +283,7 @@ export function createSessionsSpawnTool(opts?: {
             timeout: runTimeoutSeconds,
             label: label || undefined,
             spawnedBy: spawnedByKey,
+            spawnDepth: childDepth,
             groupId: opts?.agentGroupId ?? undefined,
             groupChannel: opts?.agentGroupChannel ?? undefined,
             groupSpace: opts?.agentGroupSpace ?? undefined,

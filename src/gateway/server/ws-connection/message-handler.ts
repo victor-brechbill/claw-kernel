@@ -758,6 +758,15 @@ export function attachGatewayWsMessageHandler(params: {
               }
             }
 
+            // GHSA-2pwv-x786-56f8: Cap effective scopes to the device's approved
+            // baseline to prevent token scope escalation.  The client may claim
+            // arbitrary scopes; we only honour those the device was approved for.
+            if (pairedScopes.length > 0 && scopes.length > 0) {
+              const allowedScopeSet = new Set(pairedScopes);
+              scopes = scopes.filter((scope) => allowedScopeSet.has(scope));
+              connectParams.scopes = scopes;
+            }
+
             await updatePairedDeviceMetadata(device.id, {
               displayName: connectParams.client.displayName,
               platform: connectParams.client.platform,

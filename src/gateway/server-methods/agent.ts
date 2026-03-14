@@ -193,6 +193,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       timeout?: number;
       label?: string;
       spawnedBy?: string;
+      spawnDepth?: number;
       inputProvenance?: InputProvenance;
     };
     const cfg = loadConfig();
@@ -206,6 +207,10 @@ export const agentHandlers: GatewayRequestHandlers = {
     let resolvedGroupSpace: string | undefined = groupSpaceRaw || undefined;
     let spawnedByValue =
       typeof request.spawnedBy === "string" ? request.spawnedBy.trim() : undefined;
+    const spawnDepthValue =
+      typeof request.spawnDepth === "number" && Number.isInteger(request.spawnDepth) && request.spawnDepth >= 0
+        ? request.spawnDepth
+        : undefined;
     const inputProvenance = normalizeInputProvenance(request.inputProvenance);
     const cached = context.dedupe.get(`agent:${idem}`);
     if (cached) {
@@ -398,7 +403,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         providerOverride: entry?.providerOverride,
         label: labelValue,
         spawnedBy: spawnedByValue,
-        spawnDepth: entry?.spawnDepth,
+        spawnDepth: spawnDepthValue ?? entry?.spawnDepth,
         channel: entry?.channel ?? request.channel?.trim(),
         groupId: resolvedGroupId ?? entry?.groupId,
         groupChannel: resolvedGroupChannel ?? entry?.groupChannel,
