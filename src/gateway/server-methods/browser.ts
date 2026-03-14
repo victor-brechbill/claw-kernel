@@ -140,6 +140,12 @@ export const browserHandlers: GatewayRequestHandlers = {
       );
       return;
     }
+
+    const BLOCKED_BROWSER_PATHS = ["/profiles/create", "/profiles/delete"];
+    if (BLOCKED_BROWSER_PATHS.some(blocked => path.startsWith(blocked))) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "profile create/delete not allowed via browser.request"));
+      return;
+    }
     if (methodRaw !== "GET" && methodRaw !== "POST" && methodRaw !== "DELETE") {
       respond(
         false,

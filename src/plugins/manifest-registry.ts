@@ -172,6 +172,7 @@ export function loadPluginManifestRegistry(params: {
     : discoverOpenClawPlugins({
         workspaceDir: params.workspaceDir,
         extraPaths: normalized.loadPaths,
+        trustWorkspace: config.plugins?.trustWorkspace,
       });
   const diagnostics: PluginDiagnostic[] = [...discovery.diagnostics];
   const candidates: PluginCandidate[] = discovery.candidates;

@@ -210,6 +210,7 @@ export function loadOpenClawPlugins(options: PluginLoadOptions = {}): PluginRegi
   const discovery = discoverOpenClawPlugins({
     workspaceDir: options.workspaceDir,
     extraPaths: normalized.loadPaths,
+    trustWorkspace: cfg.plugins?.trustWorkspace,
   });
   const manifestRegistry = loadPluginManifestRegistry({
     config: cfg,

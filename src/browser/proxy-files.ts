@@ -1,5 +1,7 @@
 import { saveMediaBuffer } from "../media/store.js";
 
+const BROWSER_PROXY_MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
+
 export type BrowserProxyFile = {
   path: string;
   base64: string;
@@ -13,6 +15,9 @@ export async function persistBrowserProxyFiles(files: BrowserProxyFile[] | undef
   const mapping = new Map<string, string>();
   for (const file of files) {
     const buffer = Buffer.from(file.base64, "base64");
+    if (buffer.byteLength > BROWSER_PROXY_MAX_FILE_BYTES) {
+      throw new Error(`browser proxy file exceeds ${Math.round(BROWSER_PROXY_MAX_FILE_BYTES / (1024 * 1024))}MB size limit`);
+    }
     const saved = await saveMediaBuffer(buffer, file.mimeType, "browser", buffer.byteLength);
     mapping.set(file.path, saved.path);
   }

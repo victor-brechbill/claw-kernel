@@ -138,11 +138,6 @@ function discoverInDirectory(params: {
   for (const entry of entries) {
     const fullPath = path.join(params.dir, entry.name);
     if (entry.isFile()) {
-      // Skip .js files in bundled extensions directory (these are shared chunks from the bundler)
-      // Only individual plugin subdirectories should be scanned
-      if (params.origin === "bundled") {
-        continue;
-      }
       if (!isExtensionFile(fullPath)) {
         continue;
       }
@@ -306,6 +301,7 @@ function discoverFromPath(params: {
 export function discoverOpenClawPlugins(params: {
   workspaceDir?: string;
   extraPaths?: string[];
+  trustWorkspace?: boolean;
 }): PluginDiscoveryResult {
   const candidates: PluginCandidate[] = [];
   const diagnostics: PluginDiagnostic[] = [];
@@ -331,16 +327,25 @@ export function discoverOpenClawPlugins(params: {
     });
   }
   if (workspaceDir) {
-    const workspaceRoot = resolveUserPath(workspaceDir);
-    const workspaceExtDirs = [path.join(workspaceRoot, ".openclaw", "extensions")];
-    for (const dir of workspaceExtDirs) {
-      discoverInDirectory({
-        dir,
-        origin: "workspace",
-        workspaceDir: workspaceRoot,
-        candidates,
-        diagnostics,
-        seen,
+    if (params.trustWorkspace === true) {
+      const workspaceRoot = resolveUserPath(workspaceDir);
+      const workspaceExtDirs = [path.join(workspaceRoot, ".openclaw", "extensions")];
+      for (const dir of workspaceExtDirs) {
+        discoverInDirectory({
+          dir,
+          origin: "workspace",
+          workspaceDir: workspaceRoot,
+          candidates,
+          diagnostics,
+          seen,
+        });
+      }
+    } else {
+      diagnostics.push({
+        level: "warn",
+        message:
+          "workspace plugins skipped (not trusted). Set plugins.trustWorkspace: true to enable.",
+        source: workspaceDir,
       });
     }
   }

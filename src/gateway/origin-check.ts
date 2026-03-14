@@ -1,6 +1,8 @@
 import { isLoopbackHost, normalizeHostHeader, resolveHostName } from "./net.js";
 
-type OriginCheckResult = { ok: true } | { ok: false; reason: string };
+export type OriginCheckResult =
+  | { ok: true; matchedBy: "allowlist" | "host-header" | "loopback" }
+  | { ok: false; reason: string };
 
 function parseOrigin(
   originRaw?: string,
@@ -25,6 +27,8 @@ export function checkBrowserOrigin(params: {
   requestHost?: string;
   origin?: string;
   allowedOrigins?: string[];
+  allowHostHeaderOriginFallback?: boolean;
+  isLocalClient?: boolean;
 }): OriginCheckResult {
   const parsedOrigin = parseOrigin(params.origin);
   if (!parsedOrigin) {
@@ -35,17 +39,24 @@ export function checkBrowserOrigin(params: {
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
   if (allowlist.includes(parsedOrigin.origin)) {
-    return { ok: true };
+    return { ok: true, matchedBy: "allowlist" };
   }
 
-  const requestHost = normalizeHostHeader(params.requestHost);
-  if (requestHost && parsedOrigin.host === requestHost) {
-    return { ok: true };
+  const allowHostHeader = params.allowHostHeaderOriginFallback !== false;
+  if (allowHostHeader) {
+    const requestHost = normalizeHostHeader(params.requestHost);
+    if (requestHost && parsedOrigin.host === requestHost) {
+      return { ok: true, matchedBy: "host-header" };
+    }
   }
 
-  const requestHostname = resolveHostName(requestHost);
-  if (isLoopbackHost(parsedOrigin.hostname) && isLoopbackHost(requestHostname)) {
-    return { ok: true };
+  const allowLoopback = params.isLocalClient !== false;
+  if (allowLoopback) {
+    const requestHost = normalizeHostHeader(params.requestHost);
+    const requestHostname = resolveHostName(requestHost);
+    if (isLoopbackHost(parsedOrigin.hostname) && isLoopbackHost(requestHostname)) {
+      return { ok: true, matchedBy: "loopback" };
+    }
   }
 
   return { ok: false, reason: "origin not allowed" };

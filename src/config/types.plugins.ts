@@ -29,6 +29,8 @@ export type PluginsConfig = {
   allow?: string[];
   /** Optional plugin denylist (plugin ids). */
   deny?: string[];
+  /** Trust workspace plugins in .openclaw/extensions (default false). */
+  trustWorkspace?: boolean;
   load?: PluginsLoadConfig;
   slots?: PluginSlotsConfig;
   entries?: Record<string, PluginEntryConfig>;
