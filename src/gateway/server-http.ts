@@ -636,10 +636,13 @@ export function attachGatewayUpgradeHandler(opts: {
       const origin = getHeader(req, "origin");
       if (origin) {
         const configSnapshot = loadConfig();
+        const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
+        const isLocal = isLocalDirectRequest(req, trustedProxies);
         const originCheck = checkBrowserOrigin({
           requestHost: req.headers.host,
           origin,
           allowedOrigins: configSnapshot.gateway?.controlUi?.allowedOrigins,
+          isLocalClient: isLocal,
         });
         if (!originCheck.ok) {
           socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");

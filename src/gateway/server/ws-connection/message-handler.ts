@@ -318,6 +318,7 @@ export function attachGatewayWsMessageHandler(params: {
             requestHost,
             origin: requestOrigin,
             allowedOrigins: configSnapshot.gateway?.controlUi?.allowedOrigins,
+            isLocalClient,
           });
           if (!originCheck.ok) {
             const errorMessage =

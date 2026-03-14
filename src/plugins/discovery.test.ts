@@ -59,7 +59,7 @@ describe("discoverOpenClawPlugins", () => {
     fs.writeFileSync(path.join(workspaceExt, "beta.ts"), "export default function () {}", "utf-8");
 
     const { candidates } = await withStateDir(stateDir, async () => {
-      return discoverOpenClawPlugins({ workspaceDir });
+      return discoverOpenClawPlugins({ workspaceDir, trustWorkspace: true });
     });
 
     const ids = candidates.map((c) => c.idHint);
