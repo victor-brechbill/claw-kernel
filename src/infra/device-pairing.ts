@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setupCodeTracker } from "../pairing/setup-code.js";
 import {
   createAsyncLock,
   pruneExpiredPending,
@@ -226,12 +227,16 @@ export async function getPairedDevice(
 }
 
 export async function requestDevicePairing(
-  req: Omit<DevicePairingPendingRequest, "requestId" | "ts" | "isRepair">,
+  req: Omit<DevicePairingPendingRequest, "requestId" | "ts" | "isRepair"> & {
+    /** SEC-6c: Bootstrap setup code for single-use enforcement. */
+    setupCode?: string;
+  },
   baseDir?: string,
 ): Promise<{
-  status: "pending";
+  status: "pending" | "rejected";
   request: DevicePairingPendingRequest;
   created: boolean;
+  reason?: string;
 }> {
   return await withLock(async () => {
     const state = await loadState(baseDir);
@@ -239,6 +244,25 @@ export async function requestDevicePairing(
     if (!deviceId) {
       throw new Error("deviceId required");
     }
+
+    // SEC-6c: Reject replayed bootstrap setup codes.
+    if (req.setupCode) {
+      if (setupCodeTracker.isConsumed(req.setupCode)) {
+        const stub: DevicePairingPendingRequest = {
+          requestId: "",
+          deviceId,
+          publicKey: req.publicKey,
+          ts: Date.now(),
+        };
+        return {
+          status: "rejected",
+          request: stub,
+          created: false,
+          reason: "setup-code-already-used",
+        };
+      }
+    }
+
     const existing = Object.values(state.pendingById).find((p) => p.deviceId === deviceId);
     if (existing) {
       return { status: "pending", request: existing, created: false };
@@ -269,6 +293,8 @@ export async function requestDevicePairing(
 export async function approveDevicePairing(
   requestId: string,
   baseDir?: string,
+  /** SEC-6c: Setup code to mark as consumed on successful approval. */
+  setupCode?: string,
 ): Promise<{ requestId: string; device: PairedDevice } | null> {
   return await withLock(async () => {
     const state = await loadState(baseDir);
@@ -276,7 +302,7 @@ export async function approveDevicePairing(
     if (!pending) {
       return null;
     }
-    const now = Date.now();
+    const approvalNow = Date.now();
     const existing = state.pairedByDeviceId[pending.deviceId];
     const roles = mergeRoles(existing?.roles, existing?.role, pending.roles, pending.role);
     const scopes = mergeScopes(existing?.scopes, pending.scopes);
@@ -308,12 +334,16 @@ export async function approveDevicePairing(
       scopes,
       remoteIp: pending.remoteIp,
       tokens,
-      createdAtMs: existing?.createdAtMs ?? now,
-      approvedAtMs: now,
+      createdAtMs: existing?.createdAtMs ?? approvalNow,
+      approvedAtMs: approvalNow,
     };
     delete state.pendingById[requestId];
     state.pairedByDeviceId[device.deviceId] = device;
     await persistState(state, baseDir);
+    // SEC-6c: Mark setup code as consumed after successful approval.
+    if (setupCode) {
+      setupCodeTracker.consume(setupCode);
+    }
     return { requestId, device };
   });
 }

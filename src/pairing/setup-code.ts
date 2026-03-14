@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import os from "node:os";
 import type { OpenClawConfig } from "../config/types.js";
 
@@ -394,3 +395,89 @@ export async function resolvePairingSetupFromConfig(
     urlSource: urlResult.source ?? "unknown",
   };
 }
+
+// SEC-6c: Single-use setup code tracking via nonce set with TTL cleanup.
+
+const DEFAULT_CONSUMED_CODE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const DEFAULT_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+type ConsumedEntry = { nonce: string; expiresAtMs: number };
+
+export class ConsumedSetupCodeTracker {
+  private readonly consumed = new Map<string, ConsumedEntry>();
+  private readonly ttlMs: number;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(ttlMs: number = DEFAULT_CONSUMED_CODE_TTL_MS) {
+    this.ttlMs = ttlMs;
+  }
+
+  /** Start periodic TTL cleanup. */
+  startCleanup(intervalMs: number = DEFAULT_CLEANUP_INTERVAL_MS): void {
+    if (this.cleanupTimer) {
+      return;
+    }
+    this.cleanupTimer = setInterval(() => this.prune(), intervalMs);
+    if (typeof this.cleanupTimer === "object" && "unref" in this.cleanupTimer) {
+      this.cleanupTimer.unref();
+    }
+  }
+
+  /** Stop periodic cleanup. */
+  stopCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+  }
+
+  /** Hash a setup code to a fixed-size nonce for storage. */
+  private hash(code: string): string {
+    return crypto.createHash("sha256").update(code).digest("hex");
+  }
+
+  /** Check if a setup code has already been consumed. */
+  isConsumed(code: string): boolean {
+    const nonce = this.hash(code);
+    const entry = this.consumed.get(nonce);
+    if (!entry) {
+      return false;
+    }
+    if (Date.now() > entry.expiresAtMs) {
+      this.consumed.delete(nonce);
+      return false;
+    }
+    return true;
+  }
+
+  /** Mark a setup code as consumed. Returns false if already consumed. */
+  consume(code: string): boolean {
+    if (this.isConsumed(code)) {
+      return false;
+    }
+    const nonce = this.hash(code);
+    this.consumed.set(nonce, {
+      nonce,
+      expiresAtMs: Date.now() + this.ttlMs,
+    });
+    return true;
+  }
+
+  /** Remove expired entries. */
+  prune(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.consumed) {
+      if (now > entry.expiresAtMs) {
+        this.consumed.delete(key);
+      }
+    }
+  }
+
+  /** Number of currently tracked nonces (for testing). */
+  get size(): number {
+    return this.consumed.size;
+  }
+}
+
+/** Singleton tracker for setup code replay prevention. */
+export const setupCodeTracker = new ConsumedSetupCodeTracker();
