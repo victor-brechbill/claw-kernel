@@ -1,7 +1,6 @@
-import { webhookCallback } from "grammy";
 import { createServer } from "node:http";
+import { webhookCallback } from "grammy";
 import type { OpenClawConfig } from "../config/config.js";
-import type { RuntimeEnv } from "../runtime.js";
 import { isDiagnosticsEnabled } from "../infra/diagnostic-events.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { installRequestBodyLimitGuard } from "../infra/http-body.js";
@@ -12,7 +11,9 @@ import {
   startDiagnosticHeartbeat,
   stopDiagnosticHeartbeat,
 } from "../logging/diagnostic.js";
+import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
+import { safeEqualSecret } from "../security/secret-equal.js";
 import { resolveTelegramAllowedUpdates } from "./allowed-updates.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { createTelegramBot } from "./bot.js";
@@ -74,6 +75,16 @@ export async function startTelegramWebhook(opts: {
     if (req.url !== path || req.method !== "POST") {
       res.writeHead(404);
       res.end();
+      return;
+    }
+    // SEC-6a: Validate secret token header BEFORE any body parsing.
+    const incomingSecret =
+      typeof req.headers["x-telegram-bot-api-secret-token"] === "string"
+        ? req.headers["x-telegram-bot-api-secret-token"]
+        : "";
+    if (!safeEqualSecret(incomingSecret, secret)) {
+      res.writeHead(401);
+      res.end("Unauthorized");
       return;
     }
     const startTime = Date.now();

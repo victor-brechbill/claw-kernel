@@ -118,7 +118,12 @@ function foldMarkerChar(char: string): string {
 }
 
 function foldMarkerText(input: string): string {
-  return input.replace(
+  // SEC-6b: Strip zero-width and soft-hyphen characters before folding
+  // to prevent marker bypass via invisible character insertion.
+  const stripped = input
+    .replace(/[\u200B-\u200F\u2060-\u206F\uFEFF\u00AD\u180B-\u180E]/g, "")
+    .replace(/\u034F/g, "");
+  return stripped.replace(
     /[\uFF21-\uFF3A\uFF41-\uFF5A\uFF1C\uFF1E\u2329\u232A\u3008\u3009\u2039\u203A\u27E8\u27E9\uFE64\uFE65]/g,
     (char) => foldMarkerChar(char),
   );

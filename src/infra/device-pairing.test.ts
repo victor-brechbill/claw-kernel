@@ -2,6 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { ConsumedSetupCodeTracker } from "../pairing/setup-code.js";
 import {
   approveDevicePairing,
   getPairedDevice,
@@ -108,5 +109,65 @@ describe("device pairing tokens", () => {
         baseDir,
       }),
     ).resolves.toEqual({ ok: false, reason: "token-mismatch" });
+  });
+});
+
+describe("SEC-6c: setup code replay prevention", () => {
+  test("rejects pairing request with already-consumed setup code", async () => {
+    const baseDir = await mkdtemp(join(tmpdir(), "openclaw-device-pairing-"));
+    const setupCode = "test-setup-code-abc123";
+
+    // First request succeeds
+    const first = await requestDevicePairing(
+      {
+        deviceId: "device-replay-1",
+        publicKey: "pk-1",
+        role: "operator",
+        scopes: ["operator.read"],
+        setupCode,
+      },
+      baseDir,
+    );
+    expect(first.status).toBe("pending");
+    expect(first.created).toBe(true);
+
+    // Approve and consume the code
+    await approveDevicePairing(first.request.requestId, baseDir, setupCode);
+
+    // Second request with same setup code is rejected
+    const second = await requestDevicePairing(
+      {
+        deviceId: "device-replay-2",
+        publicKey: "pk-2",
+        role: "operator",
+        scopes: ["operator.read"],
+        setupCode,
+      },
+      baseDir,
+    );
+    expect(second.status).toBe("rejected");
+    expect(second.reason).toBe("setup-code-already-used");
+  });
+
+  test("ConsumedSetupCodeTracker tracks and expires nonces", () => {
+    const tracker = new ConsumedSetupCodeTracker(100); // 100ms TTL
+
+    expect(tracker.isConsumed("code-a")).toBe(false);
+    expect(tracker.consume("code-a")).toBe(true);
+    expect(tracker.isConsumed("code-a")).toBe(true);
+    expect(tracker.consume("code-a")).toBe(false); // already consumed
+    expect(tracker.size).toBe(1);
+  });
+
+  test("ConsumedSetupCodeTracker prunes expired entries", async () => {
+    const tracker = new ConsumedSetupCodeTracker(50); // 50ms TTL
+
+    tracker.consume("code-b");
+    expect(tracker.size).toBe(1);
+
+    await new Promise((r) => setTimeout(r, 80));
+    tracker.prune();
+    expect(tracker.size).toBe(0);
+    expect(tracker.isConsumed("code-b")).toBe(false);
   });
 });

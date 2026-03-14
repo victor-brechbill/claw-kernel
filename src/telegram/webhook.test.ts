@@ -98,8 +98,58 @@ describe("startTelegramWebhook", () => {
     if (!addr || typeof addr === "string") {
       throw new Error("no addr");
     }
-    await fetch(`http://127.0.0.1:${addr.port}/hook`, { method: "POST" });
+    await fetch(`http://127.0.0.1:${addr.port}/hook`, {
+      method: "POST",
+      headers: { "X-Telegram-Bot-Api-Secret-Token": "secret" },
+    });
     expect(handlerSpy).toHaveBeenCalled();
+    abort.abort();
+  });
+
+  it("rejects webhook request with missing secret token", async () => {
+    handlerSpy.mockClear();
+    const abort = new AbortController();
+    const { server } = await startTelegramWebhook({
+      token: "tok",
+      secret: "secret",
+      accountId: "opie",
+      config: { bindings: [] },
+      port: 0,
+      abortSignal: abort.signal,
+      path: "/hook",
+    });
+    const addr = server.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("no addr");
+    }
+    const res = await fetch(`http://127.0.0.1:${addr.port}/hook`, { method: "POST" });
+    expect(res.status).toBe(401);
+    expect(handlerSpy).not.toHaveBeenCalled();
+    abort.abort();
+  });
+
+  it("rejects webhook request with wrong secret token", async () => {
+    handlerSpy.mockClear();
+    const abort = new AbortController();
+    const { server } = await startTelegramWebhook({
+      token: "tok",
+      secret: "secret",
+      accountId: "opie",
+      config: { bindings: [] },
+      port: 0,
+      abortSignal: abort.signal,
+      path: "/hook",
+    });
+    const addr = server.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("no addr");
+    }
+    const res = await fetch(`http://127.0.0.1:${addr.port}/hook`, {
+      method: "POST",
+      headers: { "X-Telegram-Bot-Api-Secret-Token": "wrong" },
+    });
+    expect(res.status).toBe(401);
+    expect(handlerSpy).not.toHaveBeenCalled();
     abort.abort();
   });
 
