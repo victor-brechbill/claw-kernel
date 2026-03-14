@@ -46,6 +46,7 @@ import {
   resolveInternalSessionKey,
   resolveMainSessionAlias,
   createAgentToAgentPolicy,
+  isRequesterSpawnedSessionVisible,
 } from "./sessions-helpers.js";
 
 const SessionStatusToolSchema = Type.Object({
@@ -251,6 +252,7 @@ async function resolveModelOverride(params: {
 export function createSessionStatusTool(opts?: {
   agentSessionKey?: string;
   config?: OpenClawConfig;
+  sandboxed?: boolean;
 }): AnyAgentTool {
   return {
     label: "Session Status",
@@ -334,9 +336,43 @@ export function createSessionStatusTool(opts?: {
         throw new Error(`Unknown ${kind}: ${requestedKeyRaw}`);
       }
 
+      // GHSA-wcxr-59v9-rxr8: Sandbox subagents must only see themselves and their
+      // children — never parent or sibling sessions.  This prevents a sandboxed
+      // sub-agent from inspecting or mutating the parent session's metadata.
+      if (opts?.sandboxed && opts?.agentSessionKey) {
+        const requesterKey = resolveInternalSessionKey({
+          key: opts.agentSessionKey,
+          alias,
+          mainKey,
+        });
+        if (resolved.key !== requesterKey) {
+          const isChild = await isRequesterSpawnedSessionVisible({
+            requesterSessionKey: requesterKey,
+            targetSessionKey: resolved.key,
+          });
+          if (!isChild) {
+            throw new Error(
+              "Sandbox sub-agent access denied: session_status is restricted to the current session and its children.",
+            );
+          }
+        }
+      }
+
       const configured = resolveDefaultModelForAgent({ cfg, agentId });
       const modelRaw = readStringParam(params, "model");
       let changedModel = false;
+      // GHSA-wcxr-59v9-rxr8: Block model overrides from sandbox subagents to
+      // non-self sessions to prevent mutation of parent session configuration.
+      if (typeof modelRaw === "string" && opts?.sandboxed) {
+        const requesterKey = opts?.agentSessionKey
+          ? resolveInternalSessionKey({ key: opts.agentSessionKey, alias, mainKey })
+          : undefined;
+        if (resolved.key !== requesterKey) {
+          throw new Error(
+            "Sandbox sub-agent access denied: model overrides are restricted to the current session.",
+          );
+        }
+      }
       if (typeof modelRaw === "string") {
         const selection = await resolveModelOverride({
           cfg,

@@ -128,13 +128,14 @@ describe("gateway sessions patch", () => {
     expect(res.entry.authProfileOverrideCompactionCount).toBeUndefined();
   });
 
-  test("sets spawnDepth for subagent sessions", async () => {
+  test("sets spawnDepth for subagent sessions (internal)", async () => {
     const store: Record<string, SessionEntry> = {};
     const res = await applySessionsPatchToStore({
       cfg: {} as OpenClawConfig,
       store,
       storeKey: "agent:main:subagent:child",
       patch: { spawnDepth: 2 },
+      internal: true,
     });
     expect(res.ok).toBe(true);
     if (!res.ok) {
@@ -143,18 +144,65 @@ describe("gateway sessions patch", () => {
     expect(res.entry.spawnDepth).toBe(2);
   });
 
-  test("rejects spawnDepth on non-subagent sessions", async () => {
+  test("rejects spawnDepth on non-subagent sessions (internal)", async () => {
     const store: Record<string, SessionEntry> = {};
     const res = await applySessionsPatchToStore({
       cfg: {} as OpenClawConfig,
       store,
       storeKey: "agent:main:main",
       patch: { spawnDepth: 1 },
+      internal: true,
     });
     expect(res.ok).toBe(false);
     if (res.ok) {
       return;
     }
     expect(res.error.message).toContain("spawnDepth is only supported");
+  });
+
+  test("rejects spawnDepth from external callers (GHSA-2rqg-gjgv-84jm)", async () => {
+    const store: Record<string, SessionEntry> = {};
+    const res = await applySessionsPatchToStore({
+      cfg: {} as OpenClawConfig,
+      store,
+      storeKey: "agent:main:subagent:child",
+      patch: { spawnDepth: 1 },
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) {
+      return;
+    }
+    expect(res.error.message).toContain("internal spawn paths");
+  });
+
+  test("rejects spawnedBy from external callers (GHSA-2rqg-gjgv-84jm)", async () => {
+    const store: Record<string, SessionEntry> = {};
+    const res = await applySessionsPatchToStore({
+      cfg: {} as OpenClawConfig,
+      store,
+      storeKey: "agent:main:subagent:child",
+      patch: { spawnedBy: "agent:main:main" },
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) {
+      return;
+    }
+    expect(res.error.message).toContain("internal spawn paths");
+  });
+
+  test("allows spawnedBy from internal callers", async () => {
+    const store: Record<string, SessionEntry> = {};
+    const res = await applySessionsPatchToStore({
+      cfg: {} as OpenClawConfig,
+      store,
+      storeKey: "agent:main:subagent:child",
+      patch: { spawnedBy: "agent:main:main" },
+      internal: true,
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) {
+      return;
+    }
+    expect(res.entry.spawnedBy).toBe("agent:main:main");
   });
 });

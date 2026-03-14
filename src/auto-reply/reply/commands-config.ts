@@ -30,6 +30,16 @@ export const handleConfigCommand: CommandHandler = async (params, allowTextComma
   if (!configCommand) {
     return null;
   }
+  // GHSA-r7vr-gr74-94p8: /config must be restricted to owner senders, not just
+  // authorized senders.  When an owner allowlist is configured, only senders on
+  // that list may use /config.  This prevents authorized non-owner users from
+  // reading or modifying config values.
+  if (params.command.ownerList.length > 0 && !params.command.senderIsOwner) {
+    logVerbose(
+      `Ignoring /config from non-owner sender: ${params.command.senderId || "<unknown>"}`,
+    );
+    return { shouldContinue: false };
+  }
   if (!params.command.isAuthorizedSender) {
     logVerbose(
       `Ignoring /config from unauthorized sender: ${params.command.senderId || "<unknown>"}`,
@@ -183,6 +193,16 @@ export const handleDebugCommand: CommandHandler = async (params, allowTextComman
   const debugCommand = parseDebugCommand(params.command.commandBodyNormalized);
   if (!debugCommand) {
     return null;
+  }
+  // GHSA-r7vr-gr74-94p8: /debug must be restricted to owner senders, not just
+  // authorized senders.  When an owner allowlist is configured, only senders on
+  // that list may use /debug.  This prevents authorized non-owner users from
+  // reading or modifying debug overrides.
+  if (params.command.ownerList.length > 0 && !params.command.senderIsOwner) {
+    logVerbose(
+      `Ignoring /debug from non-owner sender: ${params.command.senderId || "<unknown>"}`,
+    );
+    return { shouldContinue: false };
   }
   if (!params.command.isAuthorizedSender) {
     logVerbose(

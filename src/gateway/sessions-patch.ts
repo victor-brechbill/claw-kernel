@@ -64,6 +64,12 @@ export async function applySessionsPatchToStore(params: {
   storeKey: string;
   patch: SessionsPatchParams;
   loadGatewayModelCatalog?: () => Promise<ModelCatalogEntry[]>;
+  /**
+   * When true, the patch is from an internal spawn path (e.g. sessions_spawn tool).
+   * Only internal callers may set lineage fields (spawnedBy, spawnDepth).
+   * External callers (e.g. WS clients) must not set these fields.
+   */
+  internal?: boolean;
 }): Promise<{ ok: true; entry: SessionEntry } | { ok: false; error: ErrorShape }> {
   const { cfg, store, storeKey, patch } = params;
   const now = Date.now();
@@ -78,6 +84,14 @@ export async function applySessionsPatchToStore(params: {
         updatedAt: Math.max(existing.updatedAt ?? 0, now),
       }
     : { sessionId: randomUUID(), updatedAt: now };
+
+  // Lineage fields (spawnedBy, spawnDepth) are security-sensitive: they control
+  // session ancestry, spawn-depth limits, and workspace boundaries.  Only internal
+  // spawn paths (sessions_spawn tool) may set them.  External callers (WS clients)
+  // are rejected to prevent workspace-boundary override attacks (GHSA-2rqg-gjgv-84jm).
+  if (!params.internal && ("spawnedBy" in patch || "spawnDepth" in patch)) {
+    return invalid("spawnedBy and spawnDepth can only be set by internal spawn paths");
+  }
 
   if ("spawnedBy" in patch) {
     const raw = patch.spawnedBy;
