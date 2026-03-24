@@ -476,22 +476,24 @@ cat ~/.openclaw/openclaw.json | jq '.channels.telegram.allowFrom'  # Should cont
 
 ---
 
-### ✅ Step 7: OAuth Token Refresh (System Cron)
+### ✅ Step 7: OAuth Token Sync (System Cron)
 
-**What this is:** Automatic refresh of Claude Code OAuth tokens every 6 hours using **system cron** (NOT OpenClaw cron)
+**What this is:** Syncs OAuth tokens from OpenClaw → Claude Code every 6 hours using **system cron** (NOT OpenClaw cron)
+
+**How token refresh works:**
+
+OpenClaw has **built-in token refresh** — it automatically refreshes expired OAuth tokens when making API calls. This is the primary refresh mechanism and requires no external scripts.
+
+However, if you use **Claude Code** for coding agents (developer, code-reviewer), Claude Code needs its own copy of the fresh tokens. This cron job syncs tokens from OpenClaw (source of truth) → Claude Code.
 
 **Why this MUST be system cron:**
 
-🚨 **CRITICAL:** This cron job runs OUTSIDE of OpenClaw via `crontab -e`. It MUST NOT be an OpenClaw cron job because:
-
-1. **Expired tokens prevent OpenClaw from starting** - If the token expires, OpenClaw can't authenticate and won't start
-2. **This script needs to run even if OpenClaw is down** - It's the safety net that prevents 24-hour agent death
-3. **Bootstrapping problem** - OpenClaw cron jobs can't run if OpenClaw can't authenticate
+🚨 This runs OUTSIDE of OpenClaw via `crontab -e` because Claude Code agents may need tokens even when OpenClaw's cron system is unavailable.
 
 **What it does:**
 
-1. **`refresh-claude-token.sh`** - Uses refresh token to get new access token from Anthropic, updates Claude Code credentials
-2. **`sync-oauth-tokens.sh`** - Copies fresh tokens from Claude Code → OpenClaw (one direction only!)
+- **`sync-oauth-to-claude-code.sh`** — Reads the freshest token from OpenClaw's `auth-profiles.json` and writes it to Claude Code's `.credentials.json`
+- Has retry logic: if tokens are expired, waits 10s for OpenClaw's lazy refresh to fire, then retries (3 attempts)
 
 **Implementation:**
 
@@ -499,64 +501,67 @@ cat ~/.openclaw/openclaw.json | jq '.channels.telegram.allowFrom'  # Should cont
 # Create directories
 mkdir -p ~/clawd/scripts ~/clawd/logs
 
-# Install refresh scripts
-curl -o ~/clawd/scripts/refresh-claude-token.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/refresh-claude-token.sh
+# Install sync script
+curl -o ~/clawd/scripts/sync-oauth-to-claude-code.sh \
+  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/sync-oauth-to-claude-code.sh
 
-curl -o ~/clawd/scripts/sync-oauth-tokens.sh \
-  https://raw.githubusercontent.com/victor-brechbill/claw-kernel/main/scripts/sync-oauth-tokens.sh
-
-chmod +x ~/clawd/scripts/refresh-claude-token.sh ~/clawd/scripts/sync-oauth-tokens.sh
+chmod +x ~/clawd/scripts/sync-oauth-to-claude-code.sh
 
 # Add to SYSTEM cron (runs every 6 hours)
-(crontab -l 2>/dev/null; echo "0 */6 * * * ~/clawd/scripts/refresh-claude-token.sh >> ~/clawd/logs/token-refresh.log 2>&1 && ~/clawd/scripts/sync-oauth-tokens.sh >> ~/clawd/logs/token-refresh.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "# Sync OAuth tokens from OpenClaw to Claude Code — every 6 hours"; echo "55 1,7,13,19 * * * ~/clawd/scripts/sync-oauth-to-claude-code.sh >> ~/clawd/logs/token-sync.log 2>&1") | crontab -
 ```
 
 **How to verify it's working:**
 
 ```bash
-# Check system cron job installed (NOT openclaw cron)
-crontab -l | grep refresh-claude-token
+# Check system cron job installed
+crontab -l | grep sync-oauth-to-claude-code
 
 # Check tokens are valid and not near expiry
 python3 -c "
 import json
-from datetime import datetime
-c = json.load(open('/home/ubuntu/.claude/.credentials.json'))
-exp = datetime.fromtimestamp(c['claudeAiOauth']['expiresAt'] / 1000)
-remaining = (exp - datetime.now()).total_seconds() / 3600
+from datetime import datetime, timezone
+c = json.load(open('$HOME/.claude/.credentials.json'))
+exp = datetime.fromtimestamp(c['claudeAiOauth']['expiresAt'] / 1000, tz=timezone.utc)
+remaining = (exp - datetime.now(timezone.utc)).total_seconds() / 3600
 print(f'Token expires: {exp} ({remaining:.1f}h remaining)')
 print('✅ Healthy' if remaining > 2 else '⚠️ WARNING: Token expires soon!')
 "
 
-# Check recent refresh log
-tail -10 ~/clawd/logs/token-refresh.log
+# Check recent sync log
+tail -10 ~/clawd/logs/token-sync.log
 ```
 
 **Files involved:**
 
-- **Claude Code tokens:** `~/.claude/.credentials.json` (source of truth, refreshed by script)
-- **OpenClaw tokens:** `~/.openclaw/agents/main/agent/auth-profiles.json` (synced from Claude Code)
-- **Refresh script:** `~/clawd/scripts/refresh-claude-token.sh`
-- **Sync script:** `~/clawd/scripts/sync-oauth-tokens.sh`
-- **Log:** `~/clawd/logs/token-refresh.log`
+- **OpenClaw tokens:** `~/.openclaw/agents/main/agent/auth-profiles.json` (source of truth, auto-refreshed by OpenClaw)
+- **Claude Code tokens:** `~/.claude/.credentials.json` (synced from OpenClaw)
+- **Sync script:** `~/clawd/scripts/sync-oauth-to-claude-code.sh`
+- **Log:** `~/clawd/logs/token-sync.log`
 
 **If tokens are revoked (manual reauth needed):**
 
+When a refresh token is revoked by Anthropic, OpenClaw can't auto-refresh. You need to manually re-authenticate:
+
 ```bash
-# Use dashboard System → Kernel → "Refresh OAuth Token" button, OR:
+# Option 1: Use dashboard System → Kernel → "Refresh OAuth Token" button
+# Option 2: Manual CLI
 claude auth login
-# Complete OAuth flow in browser
-# Then sync tokens:
+# Complete OAuth flow in browser, then sync to OpenClaw:
 ~/clawd/scripts/sync-oauth-tokens.sh
 ```
 
+**Additional scripts (for manual recovery only — NOT cron'd):**
+
+- **`refresh-claude-token.sh`** — Manually refresh Claude Code token via Anthropic API
+- **`sync-oauth-tokens.sh`** — Sync Claude Code → OpenClaw (reverse direction, used after `claude auth login`)
+
 **Verify:**
 
-- [ ] OAuth token refresh scripts downloaded and executable
+- [ ] Token sync script downloaded and executable
 - [ ] System cron job installed (via `crontab -e`, NOT openclaw cron)
 - [ ] Tokens are valid with >2 hours remaining
-- [ ] Log file shows successful refresh
+- [ ] Log file shows successful sync
 
 ---
 
@@ -566,7 +571,7 @@ You now have TWO different cron systems:
 
 | Type              | How to manage            | Use for                                        | Examples                                 |
 | ----------------- | ------------------------ | ---------------------------------------------- | ---------------------------------------- |
-| **System cron**   | `crontab -e`             | Scripts that MUST run even if OpenClaw is down | OAuth token refresh                      |
+| **System cron**   | `crontab -e`             | Scripts that MUST run even if OpenClaw is down | OAuth token sync, backups                |
 | **OpenClaw cron** | `openclaw cron add/list` | AI-driven tasks that need context/tools        | Heartbeat, Self-Improvement, Email Check |
 
 **Rule:** If the task needs OpenClaw to be running, use OpenClaw cron. If it needs to run even when OpenClaw is broken, use system cron.
