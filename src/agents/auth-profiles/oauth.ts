@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { OAuthCredentials, OAuthProvider } from "@mariozechner/pi-ai";
 import { getOAuthApiKey, getOAuthProviders } from "@mariozechner/pi-ai/oauth";
 import type { OpenClawConfig } from "../../config/config.js";
@@ -9,6 +12,39 @@ import { ensureAuthStoreFile, resolveAuthStorePath } from "./paths.js";
 import { suggestOAuthProfileIdForLegacyDefault } from "./repair.js";
 import { ensureAuthProfileStore, saveAuthProfileStore } from "./store.js";
 import type { AuthProfileStore } from "./types.js";
+
+function syncToClaudeCredentials(tokens: {
+  accessToken: string;
+  refreshToken: string;
+  expires: number;
+}): void {
+  const credPath = path.join(os.homedir(), ".claude", ".credentials.json");
+
+  let data: Record<string, unknown>;
+  try {
+    const raw = fs.readFileSync(credPath, "utf8");
+    data = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // File doesn't exist or isn't valid JSON — skip silently
+    return;
+  }
+
+  if (!data.claudeAiOauth || typeof data.claudeAiOauth !== "object") {
+    return;
+  }
+
+  data.claudeAiOauth = {
+    ...(data.claudeAiOauth as Record<string, unknown>),
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: tokens.expires,
+  };
+
+  const tmpPath = `${credPath}.tmp.${process.pid}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs.chmodSync(tmpPath, 0o600);
+  fs.renameSync(tmpPath, credPath);
+}
 
 const OAUTH_PROVIDER_IDS = new Set<string>(getOAuthProviders().map((provider) => provider.id));
 
@@ -71,12 +107,25 @@ async function refreshOAuthTokenWithLock(params: {
     if (!result) {
       return null;
     }
-    store.profiles[params.profileId] = {
+    const updatedCredentials = {
       ...cred,
       ...result.newCredentials,
-      type: "oauth",
+      type: "oauth" as const,
     };
+    store.profiles[params.profileId] = updatedCredentials;
     saveAuthProfileStore(store, params.agentDir);
+
+    if (cred.provider === "anthropic") {
+      try {
+        syncToClaudeCredentials({
+          accessToken: updatedCredentials.access,
+          refreshToken: updatedCredentials.refresh,
+          expires: updatedCredentials.expires,
+        });
+      } catch (err) {
+        log.warn("failed to sync refreshed tokens to Claude credentials", { err });
+      }
+    }
 
     return result;
   });
