@@ -1,13 +1,13 @@
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import { emitAgentEvent } from "../infra/agent-events.js";
+import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import type { PluginHookAfterToolCallEvent } from "../plugins/types.js";
+import { normalizeTextForComparison } from "./pi-embedded-helpers.js";
+import { isMessagingTool, isMessagingToolSendAction } from "./pi-embedded-messaging.js";
 import type {
   EmbeddedPiSubscribeContext,
   ToolCallSummary,
 } from "./pi-embedded-subscribe.handlers.types.js";
-import { emitAgentEvent } from "../infra/agent-events.js";
-import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
-import { normalizeTextForComparison } from "./pi-embedded-helpers.js";
-import { isMessagingTool, isMessagingToolSendAction } from "./pi-embedded-messaging.js";
 import {
   extractToolErrorMessage,
   extractToolResultMediaPaths,
@@ -93,7 +93,7 @@ export async function handleToolExecutionStart(
   const meta = extendExecMeta(toolName, args, inferToolMetaFromArgs(toolName, args));
   ctx.state.toolMetaById.set(toolCallId, buildToolCallSummary(toolName, args, meta));
   ctx.log.debug(
-    `embedded run tool start: runId=${ctx.params.runId} tool=${toolName} toolCallId=${toolCallId}`,
+    `embedded run tool start: runId=${ctx.params.runId} tool=${toolName}${meta ? ` detail=${meta}` : ""} toolCallId=${toolCallId}`,
   );
 
   const shouldEmitToolEvents = ctx.shouldEmitToolResult();
@@ -263,7 +263,7 @@ export async function handleToolExecutionEnd(
   });
 
   ctx.log.debug(
-    `embedded run tool end: runId=${ctx.params.runId} tool=${toolName} toolCallId=${toolCallId}`,
+    `embedded run tool end: runId=${ctx.params.runId} tool=${toolName}${meta ? ` detail=${meta}` : ""} toolCallId=${toolCallId}`,
   );
 
   if (ctx.params.onToolResult && ctx.shouldEmitToolOutput()) {
