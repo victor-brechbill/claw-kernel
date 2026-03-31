@@ -25,7 +25,7 @@ This incident is a reminder that **any dependency can be compromised**, and unpi
 The install script configures npm to **reject packages published less than 3 days ago**:
 
 ```bash
-npm config set minimum-age 3d
+npm config set minimumReleaseAge 4320
 ```
 
 This is one of the most effective defenses against supply chain attacks. Compromised packages are typically detected and removed within hours — a 3-day minimum age means you'll never automatically receive a newly-poisoned package.
@@ -85,7 +85,7 @@ Apply these settings to harden your npm environment:
 
 ```bash
 # Reject packages younger than 3 days
-npm config set minimum-age 3d
+npm config set minimumReleaseAge 4320
 
 # Do not run postinstall/preinstall scripts from dependencies
 # Prevents malicious packages from executing arbitrary code at install time

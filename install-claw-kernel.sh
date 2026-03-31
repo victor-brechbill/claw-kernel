@@ -34,7 +34,7 @@ npm config set prefix ~/.npm-global
 # Reject packages published less than 3 days ago (supply chain protection)
 # This guards against newly-compromised packages like the axios incident (2026-03-31)
 echo "🔒 Configuring npm minimum-age to reject packages published less than 3 days ago..."
-npm config set minimum-age 3d
+npm config set minimumReleaseAge 4320
 
 # Add npm global bin to PATH immediately (needed for pnpm below)
 NPM_BIN="$HOME/.npm-global/bin"
