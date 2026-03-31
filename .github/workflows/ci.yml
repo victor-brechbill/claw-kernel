@@ -19,7 +19,10 @@ jobs:
       - uses: pnpm/action-setup@v5
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
       - name: Create A2UI stub
         run: |

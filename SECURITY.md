@@ -1,116 +1,115 @@
-# Security Policy
+# Security
 
-If you believe you've found a security issue in OpenClaw, please report it privately.
+This document describes the supply chain security practices for Claw Kernel and how to keep your installation safe.
 
-## Reporting
+## Why Supply Chain Security Matters
 
-Report vulnerabilities directly to the repository where the issue lives:
+On 2026-03-31, the **axios** npm package was compromised — a popular HTTP library with hundreds of millions of weekly downloads. Malicious code was published as a new version that appeared legitimate. Users with unpinned version ranges (`^`, `~`) automatically received the malicious update on their next `npm install`.
 
-- **Core CLI and gateway** — [openclaw/openclaw](https://github.com/openclaw/openclaw)
-- **macOS desktop app** — [openclaw/openclaw](https://github.com/openclaw/openclaw) (apps/macos)
-- **iOS app** — [openclaw/openclaw](https://github.com/openclaw/openclaw) (apps/ios)
-- **Android app** — [openclaw/openclaw](https://github.com/openclaw/openclaw) (apps/android)
-- **ClawHub** — [openclaw/clawhub](https://github.com/openclaw/clawhub)
-- **Trust and threat model** — [openclaw/trust](https://github.com/openclaw/trust)
+This incident is a reminder that **any dependency can be compromised**, and unpinned ranges are a silent attack vector.
 
-For issues that don't fit a specific repo, or if you're unsure, email **security@openclaw.ai** and we'll route it.
+---
 
-For full reporting instructions see our [Trust page](https://trust.openclaw.ai).
+## Protections Baked Into Claw Kernel
 
-### Required in Reports
+### 1. Pinned Exact Dependency Versions
 
-1. **Title**
-2. **Severity Assessment**
-3. **Impact**
-4. **Affected Component**
-5. **Technical Reproduction**
-6. **Demonstrated Impact**
-7. **Environment**
-8. **Remediation Advice**
+`package.json` uses **exact versions** for all dependencies (no `^` or `~` ranges). This means:
 
-Reports without reproduction steps, demonstrated impact, and remediation advice will be deprioritized. Given the volume of AI-generated scanner findings, we must ensure we're receiving vetted reports from researchers who understand the issues.
+- You always install the exact version that was tested and audited.
+- A compromised new release cannot be silently pulled in.
+- Changes to dependency versions are explicit, reviewable git diffs.
 
-## Security & Trust
+### 2. Minimum Package Age
 
-**Jamieson O'Reilly** ([@theonejvo](https://twitter.com/theonejvo)) is Security & Trust at OpenClaw. Jamieson is the founder of [Dvuln](https://dvuln.com) and brings extensive experience in offensive security, penetration testing, and security program development.
-
-## Bug Bounties
-
-OpenClaw is a labor of love. There is no bug bounty program and no budget for paid reports. Please still disclose responsibly so we can fix issues quickly.
-The best way to help the project right now is by sending PRs.
-
-## Maintainers: GHSA Updates via CLI
-
-When patching a GHSA via `gh api`, include `X-GitHub-Api-Version: 2022-11-28` (or newer). Without it, some fields (notably CVSS) may not persist even if the request returns 200.
-
-## Out of Scope
-
-- Public Internet Exposure
-- Using OpenClaw in ways that the docs recommend not to
-- Prompt injection attacks
-
-## Operational Guidance
-
-For threat model + hardening guidance (including `openclaw security audit --deep` and `--fix`), see:
-
-- `https://docs.openclaw.ai/gateway/security`
-
-### Tool filesystem hardening
-
-- `tools.exec.applyPatch.workspaceOnly: true` (recommended): keeps `apply_patch` writes/deletes within the configured workspace directory.
-- `tools.fs.workspaceOnly: true` (optional): restricts `read`/`write`/`edit`/`apply_patch` paths to the workspace directory.
-- Avoid setting `tools.exec.applyPatch.workspaceOnly: false` unless you fully trust who can trigger tool execution.
-
-### Web Interface Safety
-
-OpenClaw's web interface (Gateway Control UI + HTTP endpoints) is intended for **local use only**.
-
-- Recommended: keep the Gateway **loopback-only** (`127.0.0.1` / `::1`).
-  - Config: `gateway.bind="loopback"` (default).
-  - CLI: `openclaw gateway run --bind loopback`.
-- Do **not** expose it to the public internet (no direct bind to `0.0.0.0`, no public reverse proxy). It is not hardened for public exposure.
-- If you need remote access, prefer an SSH tunnel or Tailscale serve/funnel (so the Gateway still binds to loopback), plus strong Gateway auth.
-- The Gateway HTTP surface includes the canvas host (`/__openclaw__/canvas/`, `/__openclaw__/a2ui/`). Treat canvas content as sensitive/untrusted and avoid exposing it beyond loopback unless you understand the risk.
-
-## Runtime Requirements
-
-### Node.js Version
-
-OpenClaw requires **Node.js 22.12.0 or later** (LTS). This version includes important security patches:
-
-- CVE-2025-59466: async_hooks DoS vulnerability
-- CVE-2026-21636: Permission model bypass vulnerability
-
-Verify your Node.js version:
+The install script configures npm to **reject packages published less than 3 days ago**:
 
 ```bash
-node --version  # Should be v22.12.0 or later
+npm config set minimum-age 3d
 ```
 
-### Docker Security
+This is one of the most effective defenses against supply chain attacks. Compromised packages are typically detected and removed within hours — a 3-day minimum age means you'll never automatically receive a newly-poisoned package.
 
-When running OpenClaw in Docker:
+This was not in place during the axios incident. It is now standard in Claw Kernel installs.
 
-1. The official image runs as a non-root user (`node`) for reduced attack surface
-2. Use `--read-only` flag when possible for additional filesystem protection
-3. Limit container capabilities with `--cap-drop=ALL`
+### 3. CI Dependency Auditing
 
-Example secure Docker run:
+Every CI run executes:
 
 ```bash
-docker run --read-only --cap-drop=ALL \
-  -v openclaw-data:/app/data \
-  openclaw/openclaw:latest
+npm audit --audit-level=high
 ```
 
-## Security Scanning
+This fails the build if any **high** or **critical** severity vulnerabilities are found in the dependency tree. PRs cannot be merged if they introduce vulnerable dependencies.
 
-This project uses `detect-secrets` for automated secret detection in CI/CD.
-See `.detect-secrets.cfg` for configuration and `.secrets.baseline` for the baseline.
+---
 
-Run locally:
+## How to Verify Dependency Integrity
+
+### Check for known vulnerabilities
 
 ```bash
-pip install detect-secrets==1.5.0
-detect-secrets scan --baseline .secrets.baseline
+npm audit
 ```
+
+For a stricter check (fail on high-severity only):
+
+```bash
+npm audit --audit-level=high
+```
+
+### Verify lockfile integrity
+
+Ensure `package-lock.json` (or `pnpm-lock.yaml`) is committed and up to date. Never use `--no-frozen-lockfile` in production installs.
+
+```bash
+# Install from lockfile only — never update it
+npm ci
+```
+
+### Check package publication age before installing new packages
+
+Before adding a new dependency, check when it was published:
+
+```bash
+npm view <package-name> time
+```
+
+Prefer packages with a stable release history. Avoid adding packages published within the last 72 hours.
+
+---
+
+## Recommended npm Config for Production Deployments
+
+Apply these settings to harden your npm environment:
+
+```bash
+# Reject packages younger than 3 days
+npm config set minimum-age 3d
+
+# Do not run postinstall/preinstall scripts from dependencies
+# Prevents malicious packages from executing arbitrary code at install time
+npm config set ignore-scripts true
+
+# Use a fixed registry (avoids dependency confusion attacks)
+npm config set registry https://registry.npmjs.org/
+```
+
+> **Note on `ignore-scripts`:** Some packages require build scripts to function (e.g., native addons like `sharp`, `@lydell/node-pty`). If you use `ignore-scripts true` globally, you may need to run build steps manually for those packages. For Claw Kernel, the `postinstall` script applies compatibility patches — skip `ignore-scripts` unless you're in a locked-down deployment environment and can handle this manually.
+
+---
+
+## Reporting a Vulnerability
+
+If you discover a security vulnerability in Claw Kernel, please **do not** open a public GitHub issue.
+
+Contact the maintainer directly via the channel listed in the repository's README, or open a [GitHub Security Advisory](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/creating-a-repository-security-advisory) for this repository.
+
+---
+
+## References
+
+- [npm Security Best Practices](https://docs.npmjs.com/packages-and-modules/securing-your-code)
+- [npm Audit documentation](https://docs.npmjs.com/cli/v10/commands/npm-audit)
+- [Supply Chain Levels for Software Artifacts (SLSA)](https://slsa.dev/)
+- [OpenSSF Best Practices Badge](https://bestpractices.coreinfrastructure.org/)

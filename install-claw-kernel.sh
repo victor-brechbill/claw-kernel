@@ -31,6 +31,11 @@ echo "✅ Node.js v$(node -v) found"
 echo "📝 Configuring npm to use ~/.npm-global for global packages..."
 npm config set prefix ~/.npm-global
 
+# Reject packages published less than 3 days ago (supply chain protection)
+# This guards against newly-compromised packages like the axios incident (2026-03-31)
+echo "🔒 Configuring npm minimum-age to reject packages published less than 3 days ago..."
+npm config set minimum-age 3d
+
 # Add npm global bin to PATH immediately (needed for pnpm below)
 NPM_BIN="$HOME/.npm-global/bin"
 export PATH="$NPM_BIN:$PATH"
