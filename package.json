@@ -179,7 +179,7 @@
     "oxfmt": "0.41.0",
     "oxlint": "1.48.0",
     "oxlint-tsgolint": "0.17.4",
-    "rolldown": "1.0.0-rc.11",
+    "rolldown": "1.0.0-rc.12",
     "tsdown": "0.21.7",
     "tsx": "4.21.0",
     "typescript": "6.0.2",
