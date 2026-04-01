@@ -13,6 +13,74 @@ import { suggestOAuthProfileIdForLegacyDefault } from "./repair.js";
 import { ensureAuthProfileStore, saveAuthProfileStore } from "./store.js";
 import type { AuthProfileStore } from "./types.js";
 
+/**
+ * After a successful Anthropic OAuth token refresh on the main agent,
+ * propagate the new credentials to all secondary agent auth stores.
+ * This prevents secondary agents (code-reviewer, developer, worker, etc.)
+ * from using stale/expired tokens and failing at startup.
+ */
+function syncToAllAgentProfiles(params: {
+  profileId: string;
+  credentials: OAuthCredentials;
+}): void {
+  const stateDir = path.join(os.homedir(), ".openclaw", "agents");
+  if (!fs.existsSync(stateDir)) {
+    return;
+  }
+
+  let agentIds: string[];
+  try {
+    agentIds = fs.readdirSync(stateDir).filter((name) => {
+      try {
+        return fs.statSync(path.join(stateDir, name)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return;
+  }
+
+  for (const agentId of agentIds) {
+    const agentAuthPath = path.join(stateDir, agentId, "agent", "auth-profiles.json");
+    if (!fs.existsSync(agentAuthPath)) {
+      continue;
+    }
+
+    try {
+      const raw = fs.readFileSync(agentAuthPath, "utf8");
+      const store = JSON.parse(raw) as {
+        profiles: Record<string, OAuthCredentials & { type: string }>;
+      };
+      if (!store?.profiles) {
+        continue;
+      }
+
+      if (!store.profiles[params.profileId]) {
+        continue;
+      }
+      const existing = store.profiles[params.profileId];
+      if (existing.type !== "oauth" || existing.provider !== params.credentials.provider) {
+        continue;
+      }
+
+      store.profiles[params.profileId] = {
+        ...existing,
+        access: params.credentials.access,
+        refresh: params.credentials.refresh,
+        expires: params.credentials.expires,
+      };
+
+      const tmpPath = `${agentAuthPath}.tmp.${process.pid}`;
+      fs.writeFileSync(tmpPath, JSON.stringify(store, null, 2) + "\n", "utf8");
+      fs.chmodSync(tmpPath, 0o600);
+      fs.renameSync(tmpPath, agentAuthPath);
+    } catch {
+      // Skip agents we can't update — don't fail the refresh
+    }
+  }
+}
+
 function syncToClaudeCredentials(tokens: {
   accessToken: string;
   refreshToken: string;
@@ -124,6 +192,21 @@ async function refreshOAuthTokenWithLock(params: {
         });
       } catch (err) {
         log.warn("failed to sync refreshed tokens to Claude credentials", { err });
+      }
+
+      // Only sync from the main agent (agentDir === undefined) to avoid propagation loops
+      if (!params.agentDir) {
+        try {
+          syncToAllAgentProfiles({
+            profileId: params.profileId,
+            credentials: updatedCredentials,
+          });
+          log.info("synced refreshed Anthropic token to all secondary agent profiles", {
+            profileId: params.profileId,
+          });
+        } catch (err) {
+          log.warn("failed to sync refreshed tokens to secondary agent profiles", { err });
+        }
       }
     }
 
