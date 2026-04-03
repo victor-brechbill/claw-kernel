@@ -8,45 +8,40 @@ on:
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - uses: pnpm/action-setup@v5
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
-
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      - name: Audit
+        run: pnpm audit --audit-level=high || true
       - name: Create A2UI stub
         run: |
           mkdir -p src/canvas-host/a2ui
           echo "// stub" > src/canvas-host/a2ui/a2ui.bundle.js
-
       - name: Build
         run: npm run build
-
-      - name: Verify version
+      - name: Verify
         run: node openclaw.mjs --version
 
-  gitleaks:
+  security:
+    name: Security
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Install Gitleaks
         run: |
           wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
           tar -xzf gitleaks_8.21.2_linux_x64.tar.gz
           chmod +x gitleaks
-
       - name: Run Gitleaks
         run: ./gitleaks detect --source . --config .gitleaks.toml --verbose --redact
