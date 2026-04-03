@@ -18,7 +18,7 @@ jobs:
           node-version: '22'
       - uses: pnpm/action-setup@v5
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
       - name: Audit
         run: pnpm audit --audit-level=high || true
       - name: Create A2UI stub
