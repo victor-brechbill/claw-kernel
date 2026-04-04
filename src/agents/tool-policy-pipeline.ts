@@ -1,5 +1,5 @@
-import type { AnyAgentTool } from "./pi-tools.types.js";
 import { filterToolsByPolicy } from "./pi-tools.policy.js";
+import type { AnyAgentTool } from "./pi-tools.types.js";
 import {
   buildPluginToolGroups,
   expandPolicyWithPluginGroups,
@@ -92,7 +92,7 @@ export function applyToolPolicyPipeline(params: {
       if (resolved.unknownAllowlist.length > 0) {
         const entries = resolved.unknownAllowlist.join(", ");
         const suffix = resolved.strippedAllowlist
-          ? "Ignoring allowlist so core tools remain available. Use tools.alsoAllow for additive plugin tool enablement."
+          ? "Allowlist contains only plugin/unknown tools; core tools are restricted. Use tools.alsoAllow to add plugin tools without restricting core tools."
           : "These entries won't match any tool unless the plugin is enabled.";
         params.warn(
           `tools: ${step.label} allowlist contains unknown entries (${entries}). ${suffix}`,

@@ -2,16 +2,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../../config/config.js";
-import type { MsgContext } from "../templating.js";
 import {
   addSubagentRunForTests,
   listSubagentRunsForRequester,
   resetSubagentRegistryForTests,
 } from "../../agents/subagent-registry.js";
+import type { OpenClawConfig } from "../../config/config.js";
 import { updateSessionStore } from "../../config/sessions.js";
 import * as internalHooks from "../../hooks/internal-hooks.js";
 import { clearPluginCommands, registerPluginCommand } from "../../plugins/commands.js";
+import type { MsgContext } from "../templating.js";
 import { resetBashChatCommandForTests } from "./bash-command.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { buildCommandsPaginationKeyboard } from "./commands-info.js";
@@ -582,7 +582,8 @@ describe("handleCommands /allowlist", () => {
       commands: { text: true, config: true },
       channels: { telegram: { allowFrom: ["123"] } },
     } as OpenClawConfig;
-    const params = buildPolicyParams("/allowlist add dm 789", cfg);
+    const baseParams = buildPolicyParams("/allowlist add dm 789", cfg);
+    const params = { ...baseParams, command: { ...baseParams.command, senderIsOwner: true } };
     const result = await handleCommands(params);
 
     expect(result.shouldContinue).toBe(false);
@@ -627,10 +628,14 @@ describe("handleCommands /allowlist", () => {
       },
     } as OpenClawConfig;
 
-    const params = buildPolicyParams("/allowlist remove dm U111", cfg, {
+    const baseParams = buildPolicyParams("/allowlist remove dm U111", cfg, {
       Provider: "slack",
       Surface: "slack",
     });
+    const params = {
+      ...baseParams,
+      command: { ...baseParams.command, isAuthorizedSender: true, senderIsOwner: true },
+    };
     const result = await handleCommands(params);
 
     expect(result.shouldContinue).toBe(false);
@@ -670,10 +675,11 @@ describe("handleCommands /allowlist", () => {
       },
     } as OpenClawConfig;
 
-    const params = buildPolicyParams("/allowlist remove dm 111", cfg, {
+    const baseParams = buildPolicyParams("/allowlist remove dm 111", cfg, {
       Provider: "discord",
       Surface: "discord",
     });
+    const params = { ...baseParams, command: { ...baseParams.command, senderIsOwner: true } };
     const result = await handleCommands(params);
 
     expect(result.shouldContinue).toBe(false);
@@ -682,6 +688,42 @@ describe("handleCommands /allowlist", () => {
     expect(written.channels?.discord?.allowFrom).toEqual(["222"]);
     expect(written.channels?.discord?.dm?.allowFrom).toBeUndefined();
     expect(result.reply?.text).toContain("channels.discord.allowFrom");
+  });
+
+  it("blocks /allowlist add for non-owner authorized senders", async () => {
+    const cfg = {
+      commands: { text: true, config: true },
+      channels: { telegram: { allowFrom: ["123"] } },
+    } as OpenClawConfig;
+    const baseParams = buildPolicyParams("/allowlist add dm 999", cfg);
+    // Authorized but NOT owner
+    const params = {
+      ...baseParams,
+      command: { ...baseParams.command, isAuthorizedSender: true, senderIsOwner: false },
+    };
+    const result = await handleCommands(params);
+
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("owner access");
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks /allowlist remove for non-owner authorized senders", async () => {
+    const cfg = {
+      commands: { text: true, config: true },
+      channels: { telegram: { allowFrom: ["123"] } },
+    } as OpenClawConfig;
+    const baseParams = buildPolicyParams("/allowlist remove dm 123", cfg);
+    // Authorized but NOT owner
+    const params = {
+      ...baseParams,
+      command: { ...baseParams.command, isAuthorizedSender: true, senderIsOwner: false },
+    };
+    const result = await handleCommands(params);
+
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("owner access");
+    expect(writeConfigFileMock).not.toHaveBeenCalled();
   });
 });
 
