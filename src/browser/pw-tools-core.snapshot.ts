@@ -1,3 +1,4 @@
+import { isBlockedHostname, isPrivateIpAddress, SsrFBlockedError } from "../infra/net/ssrf.js";
 import { type AriaSnapshotNode, formatAriaSnapshot, type RawAXNode } from "./cdp.js";
 import {
   buildRoleSnapshotFromAiSnapshot,
@@ -168,7 +169,23 @@ export async function navigateViaPlaywright(opts: {
   await page.goto(url, {
     timeout: Math.max(1000, Math.min(120_000, opts.timeoutMs ?? 20_000)),
   });
-  return { url: page.url() };
+  const finalUrl = page.url();
+  // SSRF: check the final URL after redirects to block redirect bypass attacks
+  try {
+    const parsed = new URL(finalUrl);
+    const hostname = parsed.hostname;
+    if (isBlockedHostname(hostname) || isPrivateIpAddress(hostname)) {
+      throw new SsrFBlockedError(
+        `Browser navigation redirected to a blocked address: ${parsed.origin}`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof SsrFBlockedError) {
+      throw err;
+    }
+    // Unparseable URL (e.g. about:blank, chrome://) — allow
+  }
+  return { url: finalUrl };
 }
 
 export async function resizeViewportViaPlaywright(opts: {
