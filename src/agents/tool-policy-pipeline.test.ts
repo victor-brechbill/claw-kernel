@@ -4,7 +4,9 @@ import { applyToolPolicyPipeline } from "./tool-policy-pipeline.js";
 type DummyTool = { name: string };
 
 describe("tool-policy-pipeline", () => {
-  test("strips allowlists that would otherwise disable core tools", () => {
+  test("preserves plugin-only allowlists (security: does not widen to all core tools)", () => {
+    // Security fix: plugin-only allowlists must be preserved.
+    // Previously they were stripped, which granted access to ALL core tools.
     const tools = [{ name: "exec" }, { name: "plugin_tool" }] as unknown as DummyTool[];
     const filtered = applyToolPolicyPipeline({
       // oxlint-disable-next-line typescript/no-explicit-any
@@ -21,7 +23,8 @@ describe("tool-policy-pipeline", () => {
       ],
     });
     const names = filtered.map((t) => (t as unknown as DummyTool).name).toSorted();
-    expect(names).toEqual(["exec", "plugin_tool"]);
+    // Only plugin_tool should be accessible — exec should NOT be widened in.
+    expect(names).toEqual(["plugin_tool"]);
   });
 
   test("warns about unknown allowlist entries", () => {
