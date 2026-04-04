@@ -1,11 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  GatewayAgentRow,
-  GatewaySessionRow,
-  GatewaySessionsDefaults,
-  SessionsListResult,
-} from "./session-utils.types.js";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { lookupContextTokens } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
@@ -34,6 +28,12 @@ import {
 import { isCronRunSessionKey } from "../sessions/session-key-utils.js";
 import { normalizeSessionDeliveryFields } from "../utils/delivery-context.js";
 import { readSessionTitleFieldsFromTranscript } from "./session-utils.fs.js";
+import type {
+  GatewayAgentRow,
+  GatewaySessionRow,
+  GatewaySessionsDefaults,
+  SessionsListResult,
+} from "./session-utils.types.js";
 
 export {
   archiveFileOnDisk,
@@ -560,7 +560,17 @@ function mergeSessionEntryIntoCombined(params: {
   const { cfg, combined, entry, agentId, canonicalKey } = params;
   const existing = combined[canonicalKey];
 
-  if (existing && (existing.updatedAt ?? 0) > (entry.updatedAt ?? 0)) {
+  const existingTs = existing?.updatedAt ?? 0;
+  const entryTs = entry.updatedAt ?? 0;
+
+  // When timestamps are equal, use field count as a deterministic tie-breaker:
+  // prefer the more-complete entry; if equal, prefer existing for stability.
+  const existingWins =
+    existing &&
+    (existingTs > entryTs ||
+      (existingTs === entryTs && Object.keys(existing).length >= Object.keys(entry).length));
+
+  if (existingWins) {
     combined[canonicalKey] = {
       ...entry,
       ...existing,
@@ -817,13 +827,13 @@ export function listSessionsFromStore(params: {
     if (entry?.sessionId) {
       if (includeDerivedTitles || includeLastMessage) {
         const parsed = parseAgentSessionKey(s.key);
-        const agentId =
+        const sessionRowAgentId =
           parsed && parsed.agentId ? normalizeAgentId(parsed.agentId) : resolveDefaultAgentId(cfg);
         const fields = readSessionTitleFieldsFromTranscript(
           entry.sessionId,
           storePath,
           entry.sessionFile,
-          agentId,
+          sessionRowAgentId,
         );
         if (includeDerivedTitles) {
           derivedTitle = deriveSessionTitle(entry, fields.firstUserMessage);

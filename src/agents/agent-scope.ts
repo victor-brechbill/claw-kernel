@@ -175,7 +175,11 @@ export function resolveEffectiveModelFallbacks(params: {
   return agentFallbacksOverride ?? defaultFallbacks;
 }
 
-export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
+export function resolveAgentWorkspaceDir(
+  cfg: OpenClawConfig,
+  agentId: string,
+  parentAgentId?: string,
+) {
   const id = normalizeAgentId(agentId);
   const configured = resolveAgentConfig(cfg, id)?.workspace?.trim();
   if (configured) {
@@ -188,6 +192,9 @@ export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
       return resolveUserPath(fallback);
     }
     return resolveDefaultAgentWorkspaceDir(process.env);
+  }
+  if (parentAgentId) {
+    return resolveAgentWorkspaceDir(cfg, parentAgentId);
   }
   const stateDir = resolveStateDir(process.env);
   return path.join(stateDir, `workspace-${id}`);
