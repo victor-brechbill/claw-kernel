@@ -1,8 +1,8 @@
-import type { AnyAgentTool } from "./tools/common.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { isPlainObject } from "../utils.js";
 import { normalizeToolName } from "./tool-policy.js";
+import type { AnyAgentTool } from "./tools/common.js";
 
 type HookContext = {
   agentId?: string;
@@ -59,7 +59,13 @@ export async function runBeforeToolCallHook(args: {
     }
   } catch (err) {
     const toolCallId = args.toolCallId ? ` toolCallId=${args.toolCallId}` : "";
-    log.warn(`before_tool_call hook failed: tool=${toolName}${toolCallId} error=${String(err)}`);
+    log.error(
+      `before_tool_call hook crashed — blocking tool call (fail-closed): tool=${toolName}${toolCallId} error=${String(err)}`,
+    );
+    return {
+      blocked: true,
+      reason: `Tool call blocked: before_tool_call hook crashed (${String(err)})`,
+    };
   }
 
   return { blocked: false, params };

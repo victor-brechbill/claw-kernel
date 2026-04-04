@@ -70,16 +70,18 @@ describe("before_tool_call hook integration", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("continues execution when hook throws", async () => {
+  it("blocks execution (fail-closed) when hook throws", async () => {
     hookRunner.hasHooks.mockReturnValue(true);
     hookRunner.runBeforeToolCall.mockRejectedValue(new Error("boom"));
     const execute = vi.fn().mockResolvedValue({ content: [], details: { ok: true } });
     // oxlint-disable-next-line typescript/no-explicit-any
     const tool = wrapToolWithBeforeToolCallHook({ name: "read", execute } as any);
 
-    await tool.execute("call-4", { path: "/tmp/file" }, undefined, undefined);
+    await expect(
+      tool.execute("call-4", { path: "/tmp/file" }, undefined, undefined),
+    ).rejects.toThrow(/before_tool_call hook crashed/);
 
-    expect(execute).toHaveBeenCalledWith("call-4", { path: "/tmp/file" }, undefined, undefined);
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("normalizes non-object params for hook contract", async () => {
