@@ -7,6 +7,7 @@ import {
   listSubagentRunsForRequester,
   resetSubagentRegistryForTests,
 } from "../../agents/subagent-registry.js";
+import type { ChannelId } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { updateSessionStore } from "../../config/sessions.js";
 import * as internalHooks from "../../hooks/internal-hooks.js";
@@ -634,7 +635,13 @@ describe("handleCommands /allowlist", () => {
     });
     const params = {
       ...baseParams,
-      command: { ...baseParams.command, isAuthorizedSender: true, senderIsOwner: true },
+      command: {
+        ...baseParams.command,
+        isAuthorizedSender: true,
+        senderIsOwner: true,
+        channelId: "slack" as ChannelId,
+        commandBodyNormalized: "/allowlist remove dm U111",
+      },
     };
     const result = await handleCommands(params);
 
