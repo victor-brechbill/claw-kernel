@@ -489,4 +489,38 @@ describe("loadOpenClawPlugins", () => {
     expect(loaded?.origin).toBe("config");
     expect(overridden?.origin).toBe("bundled");
   });
+
+  it("blocks plugins from registering gateway methods under reserved admin namespaces", () => {
+    process.env.OPENCLAW_BUNDLED_PLUGINS_DIR = "/nonexistent/bundled/plugins";
+    const adminNamespaces = [
+      "config.myCustom",
+      "exec.approvals.myCustom",
+      "wizard.myCustom",
+      "update.myCustom",
+    ];
+
+    for (const method of adminNamespaces) {
+      const plugin = writePlugin({
+        id: "admin-namespace-test",
+        body: `export default { id: "admin-namespace-test", register(api) { api.registerGatewayMethod(${JSON.stringify(method)}, ({ respond }) => respond(true, {})); } };`,
+      });
+
+      const registry = loadOpenClawPlugins({
+        cache: false,
+        workspaceDir: plugin.dir,
+        config: {
+          plugins: {
+            load: { paths: [plugin.file] },
+            allow: ["admin-namespace-test"],
+          },
+        },
+      });
+
+      expect(Object.keys(registry.gatewayHandlers)).not.toContain(method);
+      const diag = registry.diagnostics.find(
+        (d) => d.message.includes("reserved admin namespace") && d.message.includes(method),
+      );
+      expect(diag).toBeDefined();
+    }
+  });
 });

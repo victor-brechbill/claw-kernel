@@ -266,6 +266,13 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     }
   };
 
+  /**
+   * Reserved admin RPC method namespace prefixes that plugins may not register.
+   * These namespaces require operator.admin scope and must never be overridable
+   * by plugin-defined handlers regardless of the caller's scope headers.
+   */
+  const RESERVED_ADMIN_PREFIXES = ["config.", "exec.approvals.", "wizard.", "update."];
+
   const registerGatewayMethod = (
     record: PluginRecord,
     method: string,
@@ -273,6 +280,16 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
   ) => {
     const trimmed = method.trim();
     if (!trimmed) {
+      return;
+    }
+    // Block plugins from registering methods under reserved admin namespaces.
+    if (RESERVED_ADMIN_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `gateway method uses reserved admin namespace: ${trimmed}`,
+      });
       return;
     }
     if (coreGatewayMethods.has(trimmed) || registry.gatewayHandlers[trimmed]) {
