@@ -1,5 +1,5 @@
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import fs from "node:fs/promises";
+import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { detectMime } from "../../media/mime.js";
 import { sanitizeToolResultImages } from "../tool-images.js";
 
@@ -58,14 +58,17 @@ export function readStringParam(
   const raw = params[key];
   if (typeof raw !== "string") {
     if (required) {
-      throw new ToolInputError(`${label} required`);
+      if (raw != null) {
+        throw new ToolInputError(`${label} must be a string, got ${typeof raw}`);
+      }
+      throw new ToolInputError(`${label} required (expected: string)`);
     }
     return undefined;
   }
   const value = trim ? raw.trim() : raw;
   if (!value && !allowEmpty) {
     if (required) {
-      throw new ToolInputError(`${label} required`);
+      throw new ToolInputError(`${label} required (expected: string)`);
     }
     return undefined;
   }
@@ -115,7 +118,10 @@ export function readNumberParam(
   }
   if (value === undefined) {
     if (required) {
-      throw new ToolInputError(`${label} required`);
+      if (raw != null) {
+        throw new ToolInputError(`${label} must be a number, got ${typeof raw}`);
+      }
+      throw new ToolInputError(`${label} required (expected: number)`);
     }
     return undefined;
   }
