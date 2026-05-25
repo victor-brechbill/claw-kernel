@@ -65,9 +65,23 @@ Ticket IDs follow the format `{PREFIX}-{number}` (e.g., `TASK-001`, `TICKET-042`
 
 - Max **1 Developer** agent per project at a time
 - Max **1 Reviewer** agent per project at a time
-- Developer + Reviewer **CAN run concurrently** on the same project (they work on different branches)
+- Treat **active implementation or review in the same repo as a repo lock** before spawning or advancing work. A Developer and Reviewer in the same repo should not be advanced in parallel unless you make an explicit override.
 - Agents on **different projects** can always run concurrently
-- Check `sessions_list` before spawning — if a developer is already running on that project, wait
+- Check `sessions_list` and `~/clawd/coding/active-tasks.json` before spawning or advancing implementation/review. If the target repo already has active implementation or review work, defer/queue the next task or document an explicit override.
+
+**Active Work Gate (hard stop before implementation/review):**
+
+Before spawning a Developer, spawning a Reviewer, or sending review fixes back to a Developer:
+
+1. Run `sessions_list`.
+2. Check `~/clawd/coding/active-tasks.json` for the target repo.
+3. Check open PRs for that repo if review work may already exist.
+4. If the repo has active implementation or review work, **do not advance new same-repo work by default**.
+5. Choose one:
+   - **Defer/queue:** leave the card/backlog item waiting and write why in the card/status file.
+   - **Override:** proceed only for urgent, low-conflict, or explicitly approved work. Write the active task you are bypassing, why it is safe, and what branch/paths are expected not to collide.
+
+This gate is repo-scoped, not global. Keep parallelism across different repos.
 
 **Feature Branches for EVERY Change:** No direct pushes to main, ever.
 
@@ -182,11 +196,12 @@ Evaluate the task scope:
 
 ### Step 3: Spawn Developer Agent
 
-**⚠️ BEFORE spawning — check for repo conflicts:**
+**⚠️ BEFORE spawning — run the Active Work Gate:**
 
-1. Run `sessions_list` to find active developer agents
-2. Check their labels/status files to see which repos they're on
-3. If the target repo already has an active developer → STOP, queue this task for later
+1. Run `sessions_list` to find active Developer and Reviewer agents.
+2. Check their labels/status files and `~/clawd/coding/active-tasks.json` to see which repos they are on.
+3. If the target repo already has active implementation or review work → STOP and queue this task for later.
+4. If you override, record the reason in the card/status file before spawning.
 
 Determine the branch name:
 
@@ -322,23 +337,35 @@ When the Developer reports completion with a PR link (or direct commit):
 
 ### Step 5b: Rebase Before Review (If Needed)
 
-Before spawning the Code Reviewer, check if the feature branch needs rebasing:
+Before spawning the Code Reviewer, run the Active Work Gate for the repo, then verify the PR branch is current and mergeable. This makes conflicts surface before reviewer time.
 
 ```bash
 git fetch origin
-git log --oneline origin/main ^origin/{feature-branch} | head -5
+git rev-list --left-right --count origin/main...origin/{feature-branch}
+gh pr view {pr_number} --repo {owner}/{repo} --json mergeable,mergeStateStatus,headRefName,baseRefName,statusCheckRollup
 ```
 
-If main has moved ahead (new commits since branch was created):
+If `origin/main` is ahead of the feature branch or GitHub reports conflicts/unknown mergeability:
 
 1. **Simple case:** `git checkout {branch} && git rebase origin/main`
 2. **Conflict case:** Resolve conflicts or cherry-pick the feature commit onto fresh main
+3. Push the updated branch and update `definitionOfDone.branchSynced = true`
+4. Write the rebase/mergeability result in the card/status file before spawning the reviewer
+
+If another same-repo Developer or Reviewer is already active, defer the review spawn unless you explicitly override and document why that review will not collide.
 
 **Why this matters:** Stale branches can have merge conflicts or miss important changes from recently merged PRs. Rebasing ensures the code review happens against current main.
 
 ---
 
 ### Step 6: Spawn Code Review Agent
+
+Do not spawn the reviewer until Step 5b passes and the decision is auditable:
+
+- Branch freshness checked against current `origin/main`
+- PR mergeability checked with GitHub
+- Any rebase/cherry-pick completed and pushed
+- Same-repo active-work gate passed, or an override reason is written
 
 Spawn a subagent with label `reviewer-{id}`:
 
@@ -619,6 +646,8 @@ Track retries in the status file or a separate tracker:
 
 When spawning a Developer to fix review issues:
 
+First run the Active Work Gate for the repo. If another same-repo task is active, queue the fix unless it blocks the currently reviewed PR or you write an explicit override reason.
+
 ```
 ## Fix Code Review Issues: {id}
 
@@ -867,6 +896,9 @@ jq -r '.tasks | to_entries[] | select(.value.developer.status == "complete" and 
 
 # Check definition of done for a task
 jq -r '.tasks["TASK-123"].definitionOfDone' ~/clawd/coding/active-tasks.json
+
+# Active work gate for a repo
+jq -r --arg repo "my-project" '.tasks | to_entries[] | select((.value.repo // .value.project) == $repo) | "\(.key): dev=\(.value.developer.status // "none"), review=\(.value.reviewer.status // "none"), branch=\(.value.branch // "unknown")"' ~/clawd/coding/active-tasks.json
 ```
 
 ### Registry + Markdown Status Files
@@ -880,6 +912,16 @@ When a task completes and is merged:
 
 1. Remove from JSON registry
 2. Keep markdown status files for reference
+
+### Audit Trail Checklist
+
+Every defer, queue, override, or rebase decision must be readable later from the card, status file, or PR comment:
+
+- [ ] Repo checked with `sessions_list` and `active-tasks.json`
+- [ ] Decision recorded: defer, queue, override, or proceed
+- [ ] If override: active task bypassed, reason, expected non-overlap
+- [ ] Before review: branch freshness and PR mergeability result recorded
+- [ ] If rebased/cherry-picked: command/result and pushed SHA recorded
 
 ---
 

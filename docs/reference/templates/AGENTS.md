@@ -372,11 +372,20 @@ jq -r '.tasks | to_entries[] | "\(.key): dev=\(.value.developer.status // "none"
 
 ## 🚨 Agent Concurrency Rules (Per Project)
 
-- **Max 1 Developer agent per project** at a time
-- **Max 1 Reviewer agent per project** at a time
-- **Developer + Reviewer CAN run concurrently** on the same project (different branches)
-- Check `sessions_list` before spawning — if a developer is already running on that project, wait
+- **Max 1 active implementation/review lane per repo** by default
+- Check `sessions_list` and `coding/active-tasks.json` before spawning or advancing Developer/Reviewer work
+- If the same repo already has active implementation or review work, **defer/queue** the next same-repo task
+- Override only when urgent or clearly non-overlapping, and write the reason before proceeding
 - Agents on **different projects** can always run concurrently
+
+Before spawning a Developer, spawning a Reviewer, or sending review fixes back to a Developer:
+
+```bash
+sessions_list
+jq -r --arg repo "my-project" '.tasks | to_entries[] | select((.value.repo // .value.project) == $repo) | "\(.key): dev=\(.value.developer.status // "none"), review=\(.value.reviewer.status // "none"), branch=\(.value.branch // .value.developer.branch // "unknown")"' ~/YOUR-WORKSPACE/coding/active-tasks.json
+```
+
+Record every defer, queue, override, or proceed decision in the card/status file. For overrides, include the active task being bypassed, why it is safe, and expected non-overlap.
 
 ---
 
@@ -407,9 +416,20 @@ For each coding task:
 1. **Branch** — Create from main: `feat/TICKET-{id}-short-description`
 2. **Commit** — Small, atomic commits with clear messages
 3. **PR** — Open pull request, link to kanban card
-4. **Review** — Spawn code reviewer agent, address feedback
-5. **Merge** — Squash merge after approval, delete branch
-6. **Cleanup** — Remove status files after merge (see below)
+4. **Pre-review sync** — Fetch main, rebase/cherry-pick if stale, and confirm PR mergeability
+5. **Review** — Spawn code reviewer agent only after branch freshness and same-repo active-work checks pass
+6. **Merge** — Squash merge after approval, delete branch
+7. **Cleanup** — Remove status files after merge (see below)
+
+Pre-review check:
+
+```bash
+git fetch origin
+git rev-list --left-right --count origin/main...origin/{feature-branch}
+gh pr view {number} --repo {owner}/{repo} --json mergeable,mergeStateStatus,headRefName,baseRefName
+```
+
+If the branch is stale or conflicted, resolve that before spawning the reviewer. Write the rebase/mergeability result in the card/status file so reviewer time is not spent discovering merge conflicts.
 
 ### Process Cleanup
 
