@@ -28,8 +28,11 @@ This skill defines the complete workflow. Do not skip steps or improvise.
 
 ## 🚨 AGENT CONCURRENCY (Per Project)
 
-- Max 1 Developer + max 1 Reviewer per project (can run concurrently)
-- Check `sessions_list` first. If a developer is already running on that project → **WAIT**.
+- Max 1 active implementation/review lane per repo by default.
+- Check `sessions_list` and `coding/active-tasks.json` before spawning or advancing Developer/Reviewer work.
+- If the same repo already has active implementation or review work → **DEFER/QUEUE** by default.
+- Only override with a written reason: active task bypassed, why it is safe, and expected non-overlap.
+- Different repos can still run in parallel.
 
 ---
 
@@ -52,6 +55,9 @@ Handle completed agents before anything else:
 - If developer complete → check definition of done, spawn reviewer
 - If reviewer complete → check result, merge or send back to developer
 - If ready to merge → approve and merge PR
+- Before spawning reviewer or sending fixes back to developer → rerun the same-repo active-work gate
+
+When you defer/queue/override, write a short audit note in the card/status file before moving on.
 
 ### 2. Check ALL Repos for Unmerged PRs
 
@@ -68,10 +74,20 @@ cd /path/to/repos/project-two && gh pr list --json number,title,state,reviews,st
 - ❌ **CI failed:** Investigate failure, fix the issue, push fix
 - ⚠️ **Missing review:** Spawn code reviewer if it's your PR
 - ⏳ **Review failed:** Address feedback (send back to developer or fix directly)
-- 🔄 **Needs rebase:** Rebase onto main if behind
+- 🔄 **Needs rebase:** Rebase onto main before review; verify mergeability before spending reviewer time
 - 🗑️ **Superseded:** Close stale PRs if work was completed elsewhere
 
 **Goal:** Get to zero pending PRs before picking new backlog tasks.
+
+Before spawning a reviewer for any PR:
+
+```bash
+git fetch origin
+git rev-list --left-right --count origin/main...origin/{feature-branch}
+gh pr view {number} --repo {owner}/{repo} --json mergeable,mergeStateStatus,headRefName,baseRefName
+```
+
+If stale or conflicted, rebase/cherry-pick first, push, and record the decision/result in the card/status file.
 
 ### 3. Backlog: Cards Need PRDs?
 
@@ -97,9 +113,13 @@ Don't skip cards just because they're in `done` — users may have follow-up que
 
 Cards in review → check status, spawn review agent if needed, merge if passed.
 
+Before spawning review: verify same-repo active work, branch freshness, and PR mergeability. Defer/queue if another same-repo implementation or review is active unless you write an explicit override.
+
 ### 6. In Progress: Stuck Cards?
 
 Cards in progress → check if implementation done, spawn developer if needed.
+
+Before spawning or re-spawning implementation: verify no same-repo implementation/review lane is active. Preserve parallelism by picking work from a different repo when available.
 
 ### 7. New Work (ONLY if steps 1-6 are clear)
 
@@ -112,7 +132,10 @@ Pick an approved card assigned to you → move to `in_progress`, begin work.
 You are **NOT ALLOWED** to say HEARTBEAT_OK until you verify ALL of these:
 
 - [ ] `sessions_list` checked — no completed agents waiting
+- [ ] `active-tasks.json` checked — no same-repo implementation/review collision before spawning or advancing work
 - [ ] **ALL repos checked for unmerged PRs — all blockers resolved**
+- [ ] Review candidates checked for branch freshness and PR mergeability before reviewer spawn
+- [ ] Any defer, queue, override, or rebase decision recorded in a card/status file
 - [ ] ALL backlog cards (assigned to you) have PRDs
 - [ ] ALL user comments have responses
 - [ ] NO cards stuck in review or in_progress
